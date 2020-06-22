@@ -72,7 +72,7 @@ N64_CMD_RESET   equ H'FF'
 N64_CMD_INFO    equ H'00'
 N64_CMD_STATE   equ H'01'
 
-; https://lh6.googleusercontent.com/xliVhHm8HZ6rwGd6JuxUuhkPeFJVCr6XcoO4ubG3I3UXeEfQ2eVzMt6-rJFnjk8pZfZI20nKmA=w271
+; https://sites.google.com/site/consoleprotocols/home/nintendo-joy-bus-documentation
 N64_BIT_ZERO    equ B'11110001'
 N64_BIT_ONE     equ B'11110111'
 N64_BIT_CONSSTP equ B'11110111' ; bit #0 is not used
