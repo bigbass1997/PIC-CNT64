@@ -43,13 +43,36 @@ LowInt      code    0x0018 ; Low Priority Interrupt Vector
     retfie 1
 
 ; === DEFINE PINS (text substitutions) ===
-#define     PIN_N64DATA_IN  PORTD, 0
-#define     PIN_N64DATA_OUT PORTD, 1
-    
+; refer to pinout documentation for more information
+; reminder: all button input pins should be pulled-DOWN (default state is cleared aka 0)
+;           connect pin to power to set button to a "pressed" state
+
+#define     PIN_DEBUG_1     PORTA, 1
+#define     PIN_DEBUG_0     PORTA, 0
+
 #define     PIN_ASTICK_XA   PORTB, 4
 #define     PIN_ASTICK_YA   PORTB, 1
+
+#define     PIN_cU          PORTC, 7
+#define     PIN_cD          PORTC, 6
+#define     PIN_cL          PORTC, 5
+#define     PIN_cR          PORTC, 4
+#define     PIN_LT          PORTC, 2
+#define     PIN_RT          PORTC, 1
+#define     PIN_START       PORTC, 0
+
 #define     PIN_ASTICK_XB   PORTD, 7
 #define     PIN_ASTICK_YB   PORTD, 6
+#define     PIN_dU          PORTD, 5
+#define     PIN_dD          PORTD, 4
+#define     PIN_dL          PORTD, 3
+#define     PIN_dR          PORTD, 2
+#define     PIN_DATA_OUT    PORTD, 1
+#define     PIN_DATA_IN     PORTD, 0
+
+#define     PIN_A           PORTE, 2
+#define     PIN_B           PORTE, 1
+#define     PIN_Z           PORTE, 0
 
 ; === REGISTERS ===
 ZEROS_REG       equ H'00'
@@ -75,7 +98,7 @@ N64_CMD_STATE   equ H'01'
 ; https://sites.google.com/site/consoleprotocols/home/nintendo-joy-bus-documentation
 N64_BIT_ZERO    equ B'11110001'
 N64_BIT_ONE     equ B'11110111'
-N64_BIT_CONSSTP equ B'11110111' ; bit #0 is not used
+N64_BIT_CONSSTP equ B'11110111' ; bit #0 is not technically used, but for ease of programming, it is set to 1
 N64_BIT_CONTSTP equ B'11110011'
 
 Setup:
@@ -114,6 +137,9 @@ Setup:
     movlw   B'11111111'
     movwf   ONES_REG
     
+    bsf     ADCON1, PCFG3
+    
+    ; configure I/O ports ; refer to pinout spreadsheet/docs for how these are mapped
     ; 0 is output, 1 is input
     movlw   B'00000000'
     movwf   TRISA
@@ -124,16 +150,16 @@ Setup:
     movlw   B'11110111'
     movwf   TRISC
     
-    movlw   B'11111101' ; bit 1 is PIN_N64DATA_OUT
+    movlw   B'11111101' ; bit 1 is PIN_DATA_OUT
     movwf   TRISD
     
     movlw   B'00000111'
     movwf   TRISE
     
-    bcf     PORTA,0 ; clear debug pin
-    bcf     PORTA,1 ; clear debug pin
+    bcf     PIN_DEBUG_0 ; clear debug pin
+    bcf     PIN_DEBUG_1 ; clear debug pin
     
-    bcf     PIN_N64DATA_OUT
+    bcf     PIN_DATA_OUT
     
     movlw   B'00000000'
     movwf   N64_STATE_REG1
@@ -144,7 +170,7 @@ Setup:
     movlw   B'00000000'
     movwf   N64_STATE_REG4
     
-    bsf     PORTB, 4
+    bsf     PIN_ASTICK_XA
     
 Start:
     call    ListenForN64
@@ -206,7 +232,7 @@ HXAI_Finish:
     
     
 SetIfDataLow    macro bitIndex
-    btfss   PIN_N64DATA_IN
+    btfss   PIN_DATA_IN
     bcf     N64_BIT_REG, bitIndex
     endm
     
@@ -254,7 +280,7 @@ ListenForN64:
     wait    D'231'
     
 ListenForN64Loop:
-    btfsc   PIN_N64DATA_IN
+    btfsc   PIN_DATA_IN
     goto    ListenForN64Loop        ; wait until datapin goes LOW
     
     DetermineDataToBit 7
@@ -287,26 +313,52 @@ N64LoopFF:  ; Do 0xFF (reset/info) command here
 N64Loop00:  ; Do 0x00 (info) command here
     wait D'27'  ; this assumes console stop bit occured
     
-    TransmitByte 0x05, PIN_N64DATA_OUT, 1
-    TransmitByte 0x00, PIN_N64DATA_OUT, 1
-    TransmitByte 0x02, PIN_N64DATA_OUT, 1
+    TransmitByte 0x05, PIN_DATA_OUT, 1
+    TransmitByte 0x00, PIN_DATA_OUT, 1
+    TransmitByte 0x02, PIN_DATA_OUT, 1
     wait D'5'
-    TransmitContStopBit PIN_N64DATA_OUT, 0
+    TransmitContStopBit PIN_DATA_OUT, 0
     
     goto ContinueLFNL
     
 N64Loop01:  ; Do 0x01 (state) command here
-    wait D'27'  ; this assumes console stop bit occured
-UpdateButtonInputStates:
-    ; TODO
-    CopyRegBitToRegBit  PORTD, 5, N64_STATE_REG1, 7 ; just a test, must be changed
+    ;wait D'27'  ; this assumes console stop bit occured ; this wait is no longer necessary
     
-    TransmitByte N64_STATE_REG1, PIN_N64DATA_OUT, 0
-    TransmitByte N64_STATE_REG2, PIN_N64DATA_OUT, 0
-    TransmitByte N64_STATE_REG3, PIN_N64DATA_OUT, 0
-    TransmitByte N64_STATE_REG4, PIN_N64DATA_OUT, 0
+    ; Update input button states to state registers
+    CopyRegBitToRegBit  PIN_A,      N64_STATE_REG1, 7
+    CopyRegBitToRegBit  PIN_B,      N64_STATE_REG1, 6
+    CopyRegBitToRegBit  PIN_Z,      N64_STATE_REG1, 5
+    CopyRegBitToRegBit  PIN_START,  N64_STATE_REG1, 4
+    CopyRegBitToRegBit  PIN_dU,     N64_STATE_REG1, 3
+    CopyRegBitToRegBit  PIN_dD,     N64_STATE_REG1, 2
+    CopyRegBitToRegBit  PIN_dL,     N64_STATE_REG1, 1
+    CopyRegBitToRegBit  PIN_dR,     N64_STATE_REG1, 0
+    
+    bcf     N64_STATE_REG2, 7 ; reset RST bit
+    btfss   PIN_LT      ; if LT is pressed
+    goto    ContAfterRstCheck
+    btfss   PIN_RT      ; and RT is pressed
+    goto    ContAfterRstCheck
+    btfss   PIN_START   ; and START is pressed
+    goto    ContAfterRstCheck
+    bsf     N64_STATE_REG2, 7 ; then set RST bit
+ContAfterRstCheck:
+    CopyRegBitToRegBit  PIN_LT,     N64_STATE_REG2, 5
+    CopyRegBitToRegBit  PIN_RT,     N64_STATE_REG2, 4
+    CopyRegBitToRegBit  PIN_cU,     N64_STATE_REG2, 3
+    CopyRegBitToRegBit  PIN_cD,     N64_STATE_REG2, 2
+    CopyRegBitToRegBit  PIN_cL,     N64_STATE_REG2, 1
+    CopyRegBitToRegBit  PIN_cR,     N64_STATE_REG2, 0
+    
+    ; 60-68 "instruction" cycles will have passed by now
+    
+    ; Transmit bytes to console
+    TransmitByte N64_STATE_REG1, PIN_DATA_OUT, 0
+    TransmitByte N64_STATE_REG2, PIN_DATA_OUT, 0
+    TransmitByte N64_STATE_REG3, PIN_DATA_OUT, 0
+    TransmitByte N64_STATE_REG4, PIN_DATA_OUT, 0
     wait D'5'
-    TransmitContStopBit PIN_N64DATA_OUT, 0
+    TransmitContStopBit PIN_DATA_OUT, 0
     
     goto ContinueLFNL
     
