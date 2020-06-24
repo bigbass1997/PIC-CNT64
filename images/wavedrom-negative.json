@@ -1,0 +1,7 @@
+{
+  signal: [
+    {name: 'XA', wave: 'p........'},
+    {name: 'XB', wave: 'p........', phase: -0.5}
+  ],
+  config: { hscale: 2 }
+}
