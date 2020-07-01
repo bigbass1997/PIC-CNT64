@@ -9,4 +9,4 @@ This project will hopefully alleviate the need to tear apart original hardware, 
 _PIC-CNT64 is still a Work-In-Progress, however, the functionality does work for both button inputs and the analog stick (which requires special interrupt handling as it isn't as simple as a binary switch). Accessory PAK's are not yet implemented, and may require a different MCU with better capabilities._
 
 ### Documentation
-All documentation will be found on the wiki pages soon. The planned pinout for this microcontroller can be found in the `pinout.xls` excel spreadsheet file.
+All documentation can be found on the [wiki](https://github.com/bigbass1997/PIC-CNT64/wiki). Wiring (KiCad) schematics are found in `/pcb-schematic/` in the repo.
