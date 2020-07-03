@@ -69,6 +69,7 @@ LowInt      code    0x0018 ; Low Priority Interrupt Vector
 #define     PIN_dR          PORTD, 2
 #define     PIN_DATAIO      PORTD, 0
 #define     TRIS_DATAIO     TRISD, 0
+#define     LAT_DATAIO      LATD, 0
 
 #define     PIN_A           PORTE, 2
 #define     PIN_B           PORTE, 1
@@ -311,8 +312,10 @@ ListenForN64Loop:
     
     
 N64LoopFF:  ; Do 0xFF (reset/info) command here
+    movff   ZEROS_REG, N64_STATE_REG3 ; resets x-axis
+    movff   ZEROS_REG, N64_STATE_REG4 ; resets y-axis
     
-    goto ContinueLFNL
+    ; continue to N64Loop00...
     
 N64Loop00:  ; Do 0x00 (info) command here
     wait D'27'  ; this assumes console stop bit occured
@@ -346,6 +349,8 @@ N64Loop01:  ; Do 0x01 (state) command here
     btfss   PIN_START   ; and START is pressed
     goto    ContAfterRstCheck
     bsf     N64_STATE_REG2, 7 ; then set RST bit
+    movff   ZEROS_REG, N64_STATE_REG3 ; and reset x-axis
+    movff   ZEROS_REG, N64_STATE_REG4 ; and reset y-axis
 ContAfterRstCheck:
     CopyRegBitToRegBit  PIN_LT,     N64_STATE_REG2, 5
     CopyRegBitToRegBit  PIN_RT,     N64_STATE_REG2, 4
