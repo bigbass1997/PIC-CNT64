@@ -67,9 +67,9 @@ LowInt      code    0x0018 ; Low Priority Interrupt Vector
 #define     PIN_dD          PORTD, 4
 #define     PIN_dL          PORTD, 3
 #define     PIN_dR          PORTD, 2
-#define     PIN_DATAIO      PORTD, 0
+#define     PIN_DATAIN      PORTD, 0
+#define     PIN_DATAOUT     LATD, 0     ; LAT register is used for writing data out
 #define     TRIS_DATAIO     TRISD, 0
-#define     LAT_DATAIO      LATD, 0
 
 #define     PIN_A           PORTE, 2
 #define     PIN_B           PORTE, 1
@@ -160,8 +160,6 @@ Setup:
     bcf     PIN_DEBUG_0 ; clear debug pin
     bcf     PIN_DEBUG_1 ; clear debug pin
     
-    ;bcf     PIN_DATAIO
-    
     movlw   B'00000000'
     movwf   N64_STATE_REG1
     movlw   B'00000000'
@@ -233,7 +231,7 @@ HXAI_Finish:
     
     
 SetIfDataLow    macro bitIndex
-    btfss   PIN_DATAIO
+    btfss   PIN_DATAIN
     bcf     N64_BIT_REG, bitIndex
     endm
     
@@ -282,7 +280,7 @@ ListenForN64:
     wait    D'231'
     
 ListenForN64Loop:
-    btfsc   PIN_DATAIO
+    btfsc   PIN_DATAIN
     goto    ListenForN64Loop        ; wait until datapin goes LOW
     
     DetermineDataToBit 7
@@ -298,7 +296,7 @@ ListenForN64Loop:
     ; (in order of most to least common command)
     
     bcf     TRIS_DATAIO ; set to output
-    bsf     PIN_DATAIO
+    bsf     PIN_DATAOUT
     
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_STATE
@@ -320,11 +318,11 @@ N64LoopFF:  ; Do 0xFF (reset/info) command here
 N64Loop00:  ; Do 0x00 (info) command here
     wait D'27'  ; this assumes console stop bit occured
     
-    TransmitByte 0x05, PIN_DATAIO, 1
-    TransmitByte 0x00, PIN_DATAIO, 1
-    TransmitByte 0x02, PIN_DATAIO, 1
+    TransmitByte 0x05, PIN_DATAOUT, 1
+    TransmitByte 0x00, PIN_DATAOUT, 1
+    TransmitByte 0x02, PIN_DATAOUT, 1
     wait D'5'
-    TransmitContStopBit PIN_DATAIO, 0
+    TransmitContStopBit PIN_DATAOUT, 0
     
     goto ContinueLFNL
     
@@ -362,12 +360,12 @@ ContAfterRstCheck:
     ; 60-68 "instruction" cycles will have passed by now
     
     ; Transmit bytes to console
-    TransmitByte N64_STATE_REG1, PIN_DATAIO, 0
-    TransmitByte N64_STATE_REG2, PIN_DATAIO, 0
-    TransmitByte N64_STATE_REG3, PIN_DATAIO, 0
-    TransmitByte N64_STATE_REG4, PIN_DATAIO, 0
+    TransmitByte N64_STATE_REG1, PIN_DATAOUT, 0
+    TransmitByte N64_STATE_REG2, PIN_DATAOUT, 0
+    TransmitByte N64_STATE_REG3, PIN_DATAOUT, 0
+    TransmitByte N64_STATE_REG4, PIN_DATAOUT, 0
     wait D'5'
-    TransmitContStopBit PIN_DATAIO, 0
+    TransmitContStopBit PIN_DATAOUT, 0
     
     goto ContinueLFNL
     
