@@ -10,3 +10,6 @@ _PIC-CNT64 is still a Work-In-Progress, however, the functionality does work for
 
 ### Documentation
 All documentation can be found on the [wiki](https://github.com/bigbass1997/PIC-CNT64/wiki). Wiring (KiCad) schematics are found in `/pcb-schematic/` in the repo.
+
+### Discord/Support
+If you have questions or suggestions, you can find me on the N64 homebrew Discord server https://discord.gg/KERXwaT
