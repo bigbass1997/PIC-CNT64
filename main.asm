@@ -10,7 +10,6 @@
     CONFIG PBADEN = OFF
     
     CONFIG PLLDIV = 2
-    ;CONFIG FOSC = INTOSC_EC
     CONFIG FOSC = HSPLL_HS
     CONFIG CPUDIV = OSC1_PLL2
     CONFIG USBDIV = 2
@@ -20,20 +19,17 @@
 ResVec      code	0x0000
     goto    Setup
 
-; UNUSED AT THE MOMENT ;
+;;; UNUSED AT THE MOMENT ;;;
 HighInt     code    0x0008 ; High Priority Interrupt Vector
-    ;pulse   PORTA, 1
     ;btfsc   INTCON3, INT0IF
     ;goto    HandleN64CommandInterrupt
     bcf     INTCON3, INT0IF ; clear interrupt flag
     retfie 1
-;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 LowInt      code    0x0018 ; Low Priority Interrupt Vector
-    pulse   PORTA, 0
     btfsc   INTCON, RBIF
     goto    HandleXAInterrupt
-    ;movf    PORTB, 1
     
     btfsc   INTCON3, INT2IF
     goto    HandleYAInterrupt
@@ -47,10 +43,15 @@ LowInt      code    0x0018 ; Low Priority Interrupt Vector
 ; reminder: all button input pins should be pulled-DOWN (default state is cleared aka 0)
 ;           connect pin to power to set button to a "pressed" state
 
-#define     PIN_DEBUG_1     PORTA, 1
-#define     PIN_DEBUG_0     PORTA, 0
+#define     PIN_IO_CLK      LATA,  5
+#define     PIN_IO_SER_OUT  LATA,  4
+#define     PIN_IO_S1       LATA,  3
+#define     PIN_IO_SER_IN   PORTA, 2
+#define     PIN_IO_OE1      LATA,  1
+#define     PIN_MEM_RW      LATA,  0
 
 #define     PIN_ASTICK_XA   PORTB, 4
+#define     PIN_ADDR_SER    LATB,  3
 #define     PIN_ASTICK_YA   PORTB, 1
 
 #define     PIN_cU          PORTC, 7
@@ -67,8 +68,9 @@ LowInt      code    0x0018 ; Low Priority Interrupt Vector
 #define     PIN_dD          PORTD, 4
 #define     PIN_dL          PORTD, 3
 #define     PIN_dR          PORTD, 2
+#define     PIN_ADDR_CLK    LATD,  1
 #define     PIN_DATAIN      PORTD, 0
-#define     PIN_DATAOUT     LATD, 0     ; LAT register is used for writing data out
+#define     PIN_DATAOUT     LATD,  0     ; LAT register is used for writing data out
 #define     TRIS_DATAIO     TRISD, 0
 
 #define     PIN_A           PORTE, 2
@@ -142,23 +144,20 @@ Setup:
     
     ; configure I/O ports ; refer to pinout spreadsheet/docs for how these are mapped
     ; 0 is output, 1 is input
-    movlw   B'00000000'
+    movlw   B'00000100'
     movwf   TRISA
     
-    movlw   B'11111111' ; interrupts, leave all inputs
+    movlw   B'11110111' ; interrupts, leave all inputs, except pin B3
     movwf   TRISB
     
     movlw   B'11110111'
     movwf   TRISC
     
-    movlw   B'11111111'
+    movlw   B'11111101'
     movwf   TRISD
     
     movlw   B'00000111'
     movwf   TRISE
-    
-    bcf     PIN_DEBUG_0 ; clear debug pin
-    bcf     PIN_DEBUG_1 ; clear debug pin
     
     movlw   B'00000000'
     movwf   N64_STATE_REG1
@@ -174,101 +173,10 @@ Setup:
 Start:
     call    ListenForN64
     goto    Start
-
-; SUBROUTINES / INTERRUPT LABELS ;
-
-HandleN64CommandInterrupt:
-    ; currently unused
-    bcf     INTCON3, INT0IF ; clear interrupt flag
-    retfie 1
     
-HandleYAInterrupt:
-    ; PIN_ASTICK_YA, PIN_ASTICK_YB
-    btfsc   PIN_ASTICK_YA
-    goto    YA_IS_ONE
-YA_IS_ZERO:
-    btfsc   PIN_ASTICK_YB
-    goto    YA_NOTEQUALS_YB
-    goto    YA_EQUALS_YB
-YA_IS_ONE:
-    btfsc   PIN_ASTICK_YB
-    goto    YA_EQUALS_YB
-YA_NOTEQUALS_YB:
-    decf    N64_STATE_REG4, 1, 1
-    decf    N64_STATE_REG4, 1, 1
-    goto    HYAI_Finish
-YA_EQUALS_YB:
-    incf    N64_STATE_REG4, 1, 1
-    incf    N64_STATE_REG4, 1, 1
-HYAI_Finish:
-    bcf     INTCON3, INT2IF ; clear interrupt flag
-    bcf     INTCON3, INT1IF ; clear interrupt flag
-    retfie 1
-    
-HandleXAInterrupt:
-    ; PIN_ASTICK_XA, PIN_ASTICK_XB
-    btfsc   PIN_ASTICK_XA
-    goto    XA_IS_ONE
-XA_IS_ZERO:
-    btfsc   PIN_ASTICK_XB
-    goto    XA_NOTEQUALS_XB
-    goto    XA_EQUALS_XB
-XA_IS_ONE:
-    btfsc   PIN_ASTICK_XB
-    goto    XA_EQUALS_XB
-XA_NOTEQUALS_XB:
-    decf    N64_STATE_REG3, 1, 1
-    decf    N64_STATE_REG3, 1, 1
-    goto    HXAI_Finish
-XA_EQUALS_XB:
-    incf    N64_STATE_REG3, 1, 1
-    incf    N64_STATE_REG3, 1, 1
-HXAI_Finish:
-    movf    PORTB, 1
-    bcf     INTCON, RBIF ; clear interrupt flag
-    retfie 1
-    
-    
-    
-SetIfDataLow    macro bitIndex
-    btfss   PIN_DATAIN
-    bcf     N64_BIT_REG, bitIndex
-    endm
-    
-DetermineDataToBit  macro cmdBitIndex ; loads 4us of data from data pin and determines what type of protocol bit it is
-    movlw   B'11111111'
-    movwf   N64_BIT_REG             ; reset N64_BIT_REG
-    
-    SetIfDataLow 3;bcf     N64_BIT_REG, 3          ; first microsecond of each bit is always 0
-    wait    D'8'
-    
-    SetIfDataLow 2
-    wait    D'10'
-    
-    SetIfDataLow 1
-    wait    D'10'
-    
-    SetIfDataLow 0                  ; 2/12
-    
-    ;movff   N64_BIT_REG, PORTB
-    ;movff   ZEROS_REG, PORTB
-    
-    movf    N64_BIT_REG, 0             ; 3/12
-    xorlw   N64_BIT_ZERO            ; 4/12
-    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
-    bcf     N64_CMD_REG, cmdBitIndex; 6/12
-    
-    movf    N64_BIT_REG, 0          ; 7/12
-    xorlw   N64_BIT_ONE             ; 8/12
-    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
-    bsf     N64_CMD_REG, cmdBitIndex;10/12
-    
-    wait    D'3'                    ;12/12
-    endm
+; SUBROUTINES ;
     
 ListenForN64:
-    ;ledoff                          ; DEBUG
-    
     bsf     TRIS_DATAIO ; set to input
     wait    D'255'                  ; waits long enough to be sure we are not inside a signal command/response
     wait    D'255'
@@ -327,8 +235,6 @@ N64Loop00:  ; Do 0x00 (info) command here
     goto ContinueLFNL
     
 N64Loop01:  ; Do 0x01 (state) command here
-    ;wait D'27'  ; this assumes console stop bit occured ; this wait is no longer necessary
-    
     ; Update input button states to state registers
     CopyRegBitToRegBit  PIN_A,      N64_STATE_REG1, 7
     CopyRegBitToRegBit  PIN_B,      N64_STATE_REG1, 6
@@ -367,13 +273,62 @@ ContAfterRstCheck:
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
-    goto ContinueLFNL
+    goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
     
 ContinueLFNL:
-    ;movff   N64_CMD_REG, PORTB
-    ;movlw   B'00000000'
-    ;movwf   PORTB
+    return
     
-    return  
+; INTERRUPT SUBROUTINES ;
+
+HandleN64CommandInterrupt:
+    ; currently unused
+    bcf     INTCON3, INT0IF ; clear interrupt flag
+    retfie 1
+    
+HandleYAInterrupt:
+    ; PIN_ASTICK_YA, PIN_ASTICK_YB
+    btfsc   PIN_ASTICK_YA
+    goto    YA_IS_ONE
+YA_IS_ZERO:
+    btfsc   PIN_ASTICK_YB
+    goto    YA_NOTEQUALS_YB
+    goto    YA_EQUALS_YB
+YA_IS_ONE:
+    btfsc   PIN_ASTICK_YB
+    goto    YA_EQUALS_YB
+YA_NOTEQUALS_YB:
+    decf    N64_STATE_REG4, 1, 1
+    decf    N64_STATE_REG4, 1, 1
+    goto    HYAI_Finish
+YA_EQUALS_YB:
+    incf    N64_STATE_REG4, 1, 1
+    incf    N64_STATE_REG4, 1, 1
+HYAI_Finish:
+    bcf     INTCON3, INT2IF ; clear interrupt flag
+    bcf     INTCON3, INT1IF ; clear interrupt flag
+    retfie 1
+    
+HandleXAInterrupt:
+    ; PIN_ASTICK_XA, PIN_ASTICK_XB
+    btfsc   PIN_ASTICK_XA
+    goto    XA_IS_ONE
+XA_IS_ZERO:
+    btfsc   PIN_ASTICK_XB
+    goto    XA_NOTEQUALS_XB
+    goto    XA_EQUALS_XB
+XA_IS_ONE:
+    btfsc   PIN_ASTICK_XB
+    goto    XA_EQUALS_XB
+XA_NOTEQUALS_XB:
+    decf    N64_STATE_REG3, 1, 1
+    decf    N64_STATE_REG3, 1, 1
+    goto    HXAI_Finish
+XA_EQUALS_XB:
+    incf    N64_STATE_REG3, 1, 1
+    incf    N64_STATE_REG3, 1, 1
+HXAI_Finish:
+    movf    PORTB, 1
+    bcf     INTCON, RBIF ; clear interrupt flag
+    retfie 1
     
     end

@@ -25,32 +25,21 @@ CopyRegBitToRegBit  macro fromPort, fromBit, toPort, toBit
     bcf     toPort, toBit
     endm
     
-ledon       macro
-    bsf     PORTA,0
-    endm
-ledoff      macro
-    bcf     PORTA,0
-    endm
-pulse	    macro port, bit
-    bsf     port, bit
-    bcf     port, bit
-    endm
-
-SetPinHigh	macro port, bit
-    bsf	    port, bit
-    endm
-    
-SetPinLow	macro port, bit
-    bcf	    port, bit
+; same as CopyRegBitToRegBit, except that it inverts the output ; 1 -> 0, 0 -> 1
+CopyRegBitToInvertRegBit  macro fromPort, fromBit, toPort, toBit
+    btfsc   fromPort, fromBit
+    bcf     toPort, toBit
+    btfss   fromPort, fromBit
+    bsf     toPort, toBit
     endm
     
 ; LOW, LOW, LOW, HIGH
 TransmitZeroBit	macro port, bit, cutOvertime
     local overtime = D'11' - cutOvertime
     
-    SetPinLow port, bit
+    bcf	    port, bit
     wait D'35'
-    SetPinHigh port, bit
+    bsf	    port, bit
     wait overtime
     endm
     
@@ -58,9 +47,9 @@ TransmitZeroBit	macro port, bit, cutOvertime
 TransmitOneBit	macro port, bit, cutOvertime
     local overtime = D'35' - cutOvertime
     
-    SetPinLow port, bit
+    bcf	    port, bit
     wait D'11'
-    SetPinHigh port, bit
+    bsf	    port, bit
     wait overtime
     endm
     
@@ -68,9 +57,9 @@ TransmitOneBit	macro port, bit, cutOvertime
 TransmitContStopBit macro port, bit, cutOvertime
     local overtime = D'23' - cutOvertime
     
-    SetPinLow port, bit
+    bcf	    port, bit
     wait D'23'
-    SetPinHigh port, bit
+    bsf	    port, bit
     wait overtime
     endm
     
@@ -110,5 +99,137 @@ Bit#v(i)_0:
 Bit#v(i)_Cont:
 i -= 1
     endw
+    
+    endm
+    
+SetIfDataLow    macro bitIndex
+    btfss   PIN_DATAIN
+    bcf     N64_BIT_REG, bitIndex
+    endm
+    
+DetermineDataToBit  macro cmdBitIndex ; loads 4us of data from data pin and determines what type of protocol bit it is
+    movlw   B'11111111'
+    movwf   N64_BIT_REG             ; reset N64_BIT_REG
+    
+    SetIfDataLow 3
+    wait    D'8'
+    
+    SetIfDataLow 2
+    wait    D'10'
+    
+    SetIfDataLow 1
+    wait    D'10'
+    
+    SetIfDataLow 0                  ; 2/12
+    
+    movf    N64_BIT_REG, 0          ; 3/12
+    xorlw   N64_BIT_ZERO            ; 4/12
+    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
+    bcf     N64_CMD_REG, cmdBitIndex; 6/12
+    
+    movf    N64_BIT_REG, 0          ; 7/12
+    xorlw   N64_BIT_ONE             ; 8/12
+    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
+    bsf     N64_CMD_REG, cmdBitIndex;10/12
+    
+    wait    D'3'                    ;12/12
+    endm
+    
+; shifts one byte from reg, into SIPO shift register
+ShiftAddrByte macro reg
+    movff   reg, WREG
+    
+    LOCAL   i = 0
+    WHILE   i < 9
+    
+    rlcf    WREG
+    CopyRegBitToRegBit	STATUS, C, PIN_ADDR_SER
+    bsf	    PIN_ADDR_CLK
+    bcf	    PIN_ADDR_CLK
+    
+i += 1
+    ENDW
+    
+    endm
+    
+; shifts two bytes from reg1 and reg2, into SIPO shift register
+ShiftAddrDualByte macro reg1, reg2
+    movff   reg1, WREG
+    
+    LOCAL   i = 0
+    WHILE   i < 8
+    
+    rlcf    WREG
+    CopyRegBitToRegBit	STATUS, C, PIN_ADDR_SER
+    bsf	    PIN_ADDR_CLK
+    bcf	    PIN_ADDR_CLK
+    
+i += 1
+    ENDW
+    
+    rlcf    WREG
+    CopyRegBitToRegBit	STATUS, C, PIN_ADDR_SER
+    
+    ShiftAddrByte reg2
+    
+    endm
+    
+; shift data from reg out to IO pins
+ShiftIoOutByte	macro reg
+    movff   reg, WREG
+    bcf     PIN_IO_OE1
+    bcf	    PIN_IO_S1
+    
+    LOCAL   i = 0
+    WHILE   i < 8
+    
+    rlcf    WREG
+    CopyRegBitToRegBit STATUS, C, PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+i += 1
+    ENDW
+    
+    bcf	    PIN_IO_SER_OUT
+    bsf     PIN_IO_OE1
+    
+    endm
+    
+WriteToMem macro
+    bcf     PIN_IO_OE1
+    
+    bcf     PIN_MEM_RW
+    nop
+    nop
+    bsf     PIN_MEM_RW
+    
+    bsf     PIN_IO_OE1
+    
+    endm
+    
+; shifts data from IO pins into reg
+ShiftIoInByte	macro reg
+    movlw   B'00000000'
+    bcf     PIN_IO_OE1
+    bsf	    PIN_IO_S1
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    bcf	    PIN_IO_S1
+    
+    LOCAL   i = 0
+    WHILE   i < 8
+    
+    CopyRegBitToRegBit PIN_IO_SER_IN, STATUS, C
+    rlcf    WREG
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+i += 1
+    ENDW
+    
+    bsf     PIN_IO_OE1
+    movwf   reg
     
     endm
