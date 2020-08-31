@@ -107,7 +107,9 @@ SetIfDataLow    macro bitIndex
     bcf     N64_BIT_REG, bitIndex
     endm
     
-DetermineDataToBit  macro cmdBitIndex ; loads 4us of data from data pin and determines what type of protocol bit it is
+; loads 4us of data from data pin and determines what type of protocol bit it is
+; NOTICE: Very expensive for program memory, to use this macro
+DetermineDataToBit  macro cmdBitIndex, saveReg, access
     movlw   B'11111111'
     movwf   N64_BIT_REG             ; reset N64_BIT_REG
     
@@ -125,12 +127,12 @@ DetermineDataToBit  macro cmdBitIndex ; loads 4us of data from data pin and dete
     movf    N64_BIT_REG, 0          ; 3/12
     xorlw   N64_BIT_ZERO            ; 4/12
     btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
-    bcf     N64_CMD_REG, cmdBitIndex; 6/12
+    bcf     saveReg, cmdBitIndex    ; 6/12
     
     movf    N64_BIT_REG, 0          ; 7/12
     xorlw   N64_BIT_ONE             ; 8/12
     btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
-    bsf     N64_CMD_REG, cmdBitIndex;10/12
+    bsf     saveReg, cmdBitIndex    ;10/12
     
     wait    D'3'                    ;12/12
     endm

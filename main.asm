@@ -78,8 +78,9 @@ LowInt      code    0x0018 ; Low Priority Interrupt Vector
 #define     PIN_Z           PORTE, 0
 
 ; === REGISTERS ===
-ZEROS_REG       equ H'00'
-ONES_REG        equ H'01'
+; ACCESS BANK  (0x00 - 0x5F)
+ZEROS_REG       equ H'00' ; Always 0x00
+ONES_REG        equ H'01' ; Always 0xFF
 
 N64_BIT_REG     equ H'02' ; This register is used to temporarily store 3-4us of data
                           ; to determine if the data recieved is a 0 or 1 or a stop bit.
@@ -88,17 +89,28 @@ N64_CMD_REG     equ H'03'
 N64_ASTICKX_REG equ H'04' ; Used to store x-axis data
 N64_ASTICKY_REG equ H'05' ; Used to store y-axis data
 
-N64_STATE_REG1  equ H'08'
-N64_STATE_REG2  equ H'09'
-N64_STATE_REG3  equ H'0A' ; Analog Stick X-Axis ; -127 to +128
-N64_STATE_REG4  equ H'0B' ; Analog Stick Y-Axis ; -127 to +128
+N64_STATE_REG1  equ H'08' ; Buffer:  Button states
+N64_STATE_REG2  equ H'09' ; Buffer:  Button states
+N64_STATE_REG3  equ H'0A' ; Buffer:  Analog Stick X-Axis ; -127 to +128
+N64_STATE_REG4  equ H'0B' ; Buffer:  Analog Stick Y-Axis ; -127 to +128
+  
+; BANK 0  (0x60 - 0xFF)
+; These bytes are used for temporary storage of data coming from or going to the N64 console.
+; While only 4 addresses are defined, this whole section of memory is dedicated for this purpose.
+; Remember to specify in every instruction to use the BSR instead of Access memory.
+N64_DATA_TMP0   equ H'60'
+N64_DATA_TMP1   equ H'61'
+N64_DATA_TMP2   equ H'62'
+N64_DATA_TMP3   equ H'63'
 
 ; === CONSTANT BYTES ===
-N64_CMD_RESET   equ H'FF'
-N64_CMD_INFO    equ H'00'
-N64_CMD_STATE   equ H'01'
+N64_CMD_RESET       equ H'FF'
+N64_CMD_INFO        equ H'00'
+N64_CMD_STATE       equ H'01'
+N64_CMD_READACCES   equ H'02'
+N64_CMD_WRITEACCES  equ H'03'
 
-; https://sites.google.com/site/consoleprotocols/home/nintendo-joy-bus-documentation
+; https://n64brew.dev/wiki/Joybus_Protocol
 N64_BIT_ZERO    equ B'11110001'
 N64_BIT_ONE     equ B'11110111'
 N64_BIT_CONSSTP equ B'11110111' ; bit #0 is not technically used, but for ease of programming, it is set to 1
@@ -107,6 +119,8 @@ N64_BIT_CONTSTP equ B'11110011'
 Setup:
     movlw   B'00000000'
     movwf   FSR2L ; sets access bank start location to 0x00
+    
+    movlb   B'00000000' ; sets current GPR bank to bank 0
     
     bsf     RCON, IPEN      ; enable interrupt feature
     bsf     INTCON, GIEH    ; enable high priority interrupts
@@ -170,11 +184,42 @@ Setup:
     
     bsf     PIN_ASTICK_XA
     
+    bcf     PIN_ADDR_CLK
+    bcf     PIN_IO_CLK
+    bsf     PIN_IO_OE1
+    bsf     PIN_MEM_RW
+    
+    ShiftAddrDualByte ZEROS_REG, ZEROS_REG
+    ShiftIoOutByte ZEROS_REG
+    
+    movlw   B'01000000'
+    movwf   H'20'
+    movlw   B'00000000'
+    movwf   H'21'
+    
 Start:
     call    ListenForN64
     goto    Start
     
 ; SUBROUTINES ;
+Pause:
+    movlw   D'5'
+    movwf   H'12'
+PauseThirdLoop:
+    movlw   D'255'
+    movwf   H'11'
+PauseSecondLoop:
+    movlw   D'255'
+    movwf   H'10'
+PauseFirstLoop:
+    decfsz  H'10'
+    goto    PauseFirstLoop
+    decfsz  H'11'
+    goto    PauseSecondLoop
+    decfsz  H'12'
+    goto    PauseThirdLoop
+    
+    return
     
 ListenForN64:
     bsf     TRIS_DATAIO ; set to input
@@ -191,14 +236,14 @@ ListenForN64Loop:
     btfsc   PIN_DATAIN
     goto    ListenForN64Loop        ; wait until datapin goes LOW
     
-    DetermineDataToBit 7
-    DetermineDataToBit 6
-    DetermineDataToBit 5
-    DetermineDataToBit 4
-    DetermineDataToBit 3
-    DetermineDataToBit 2
-    DetermineDataToBit 1
-    DetermineDataToBit 0
+    DetermineDataToBit 7, N64_CMD_REG, 1
+    DetermineDataToBit 6, N64_CMD_REG, 1
+    DetermineDataToBit 5, N64_CMD_REG, 1
+    DetermineDataToBit 4, N64_CMD_REG, 1
+    DetermineDataToBit 3, N64_CMD_REG, 1
+    DetermineDataToBit 2, N64_CMD_REG, 1
+    DetermineDataToBit 1, N64_CMD_REG, 1
+    DetermineDataToBit 0, N64_CMD_REG, 1
     ; N64_CMD_REG is now set with command from N64 console
     ; Below is where N64_CMD_REG will be checked against each Protocol command
     ; (in order of most to least common command)
@@ -215,6 +260,16 @@ ListenForN64Loop:
     xorlw   N64_CMD_INFO
     btfsc   STATUS, Z
     goto N64Loop00
+    
+    movf    N64_CMD_REG, 0
+    xorlw   N64_CMD_READACCES
+    btfsc   STATUS, Z
+    goto N64Loop02
+    
+    movf    N64_CMD_REG, 0
+    xorlw   N64_CMD_WRITEACCES
+    btfsc   STATUS, Z
+    goto N64Loop03
     
     
 N64LoopFF:  ; Do 0xFF (reset/info) command here
@@ -273,7 +328,39 @@ ContAfterRstCheck:
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
+    goto ContinueLFNL
+    
+N64Loop02: ; Do 0x02 (read accessory port) command here
+    local i = 0
+    
+    while i < 2 ; read the next 2 bytes from the console
+    DetermineDataToBit 7, N64_DATA_TMP#v(i), 1
+    DetermineDataToBit 6, N64_DATA_TMP#v(i), 1
+    DetermineDataToBit 5, N64_DATA_TMP#v(i), 1
+    DetermineDataToBit 4, N64_DATA_TMP#v(i), 1
+    DetermineDataToBit 3, N64_DATA_TMP#v(i), 1
+    DetermineDataToBit 2, N64_DATA_TMP#v(i), 1
+    DetermineDataToBit 1, N64_DATA_TMP#v(i), 1
+    DetermineDataToBit 0, N64_DATA_TMP#v(i), 1
+i += 1
+    endw
+    
+    bcf     N64_DATA_TMP1, 4
+    bcf     N64_DATA_TMP1, 3
+    bcf     N64_DATA_TMP1, 2
+    bcf     N64_DATA_TMP1, 1
+    bcf     N64_DATA_TMP1, 0
+    ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
+    
+    wait D'5'
+    TransmitContStopBit PIN_DATAOUT, 0
+    
+    goto ContinueLFNL
+    
+N64Loop03: ; Do 0x03 (write accessory port) command here
+    
     goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
+    
     
 ContinueLFNL:
     return
