@@ -93,7 +93,9 @@ N64_STATE_REG1  equ H'08' ; Buffer:  Button states
 N64_STATE_REG2  equ H'09' ; Buffer:  Button states
 N64_STATE_REG3  equ H'0A' ; Buffer:  Analog Stick X-Axis ; -127 to +128
 N64_STATE_REG4  equ H'0B' ; Buffer:  Analog Stick Y-Axis ; -127 to +128
-  
+
+TX_DATA         equ H'0C' ; Data to be transmitted to the console
+
 ; BANK 0  (0x60 - 0xFF)
 ; These bytes are used for temporary storage of data coming from or going to the N64 console.
 ; While only 4 addresses are defined, this whole section of memory is dedicated for this purpose.
@@ -203,10 +205,10 @@ Start:
     
 ; SUBROUTINES ;
 Pause:
-    movlw   D'5'
+    movlw   D'1'
     movwf   H'12'
 PauseThirdLoop:
-    movlw   D'255'
+    movlw   D'10'
     movwf   H'11'
 PauseSecondLoop:
     movlw   D'255'
@@ -219,6 +221,11 @@ PauseFirstLoop:
     decfsz  H'12'
     goto    PauseThirdLoop
     
+    return
+    
+TransmitByteRoutine:
+    ; Utilizes TX_DATA register and PIN_DATAOUT to transmit a byte via the Joybus Protocol to the console
+    TransmitByte TX_DATA, PIN_DATAOUT, 0
     return
     
 ListenForN64:
@@ -283,7 +290,7 @@ N64Loop00:  ; Do 0x00 (info) command here
     
     TransmitByte 0x05, PIN_DATAOUT, 1
     TransmitByte 0x00, PIN_DATAOUT, 1
-    TransmitByte 0x02, PIN_DATAOUT, 1
+    TransmitByte 0x01, PIN_DATAOUT, 1
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
@@ -352,13 +359,20 @@ i += 1
     bcf     N64_DATA_TMP1, 0
     ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
     
+i = 0
+    while i < 32
+    movff   ONES_REG, TX_DATA
+    call TransmitByteRoutine
+i += 1
+    endw
+    
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
     goto ContinueLFNL
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
-    
+    call Pause
     goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
     
     
