@@ -230,92 +230,13 @@ Start:
     goto    Start
     
 ; SUBROUTINES ;
-; uses PAUSE_REG_0 and PAUSE_REG_1 to set the intervals of each loop
-; cycles = ((PAUSE_REG_0 * 3) - 1) + ?
-Pause2D:
-    movff   PAUSE_REG_0, PAUSE_TMP_0
-    movff   PAUSE_REG_1, PAUSE_TMP_1
-    
-Pause2D_SecondLoop:
-    movff   PAUSE_REG_0, PAUSE_TMP_0
-    
-Pause2D_FirstLoop:
-    decfsz  PAUSE_TMP_0
-    goto    Pause2D_FirstLoop
-    
-    decfsz  PAUSE_TMP_1
-    goto    Pause2D_SecondLoop
-    
-    return
-    
-Pause:
-    movlw   D'1'
-    movwf   H'12'
-PauseThirdLoop:
-    movlw   D'15'
-    movwf   H'11'
-PauseSecondLoop:
-    movlw   D'255'
-    movwf   H'10'
-PauseFirstLoop:
-    decfsz  H'10'
-    goto    PauseFirstLoop
-    decfsz  H'11'
-    goto    PauseSecondLoop
-    decfsz  H'12'
-    goto    PauseThirdLoop
-    
-    return
-    
-#ifdef USING_EUSART
-PakDump:
-    movlw   D'103'
-    movwf   PAUSE_REG_0
-    movlw   D'1'
-    movwf   PAUSE_REG_1
-    
-PakDumpLoop:
-    
-    ShiftAddrDualByte H'20', H'21' ; set address
-    ShiftIoInByte H'23' ; load byte
-    movff   H'23', TXREG ; transmit byte
-    
-    call    Pause2D
-    
-    ; increase address by 1
-    incf    H'21'
-    btfss   STATUS, Z
-    goto    PakDumpLoop
-    
-    incf    H'20'
-    btfss   STATUS, Z
-    goto    PakDumpLoop
-    
-    return
-#endif
-    
-TransmitByteRoutine:
-    ; Utilizes TX_DATA register and PIN_DATAOUT to transmit a byte via the Joybus Protocol to the console
-    TransmitByte TX_DATA, PIN_DATAOUT, 0
-    return
+    include "sub-utilities.inc"
     
 ListenForN64:
     bsf     TRIS_DATAIO ; set to input
-    ;wait    D'255'                  ; waits long enough to be sure we are not inside a signal command/response
-    ;wait    D'255'
-    ;wait    D'255'
-    ;wait    D'255'
-    ;wait    D'255'
-    ;wait    D'255'
-    ;wait    D'255'
-    ;wait    D'231'
-    movlw   D'224'
-    movwf   PAUSE_REG_0
-    movlw   D'3'
-    movwf   PAUSE_REG_1
     
-    btfsc   PIN_START
-    call    PakDump
+    ;btfsc   PIN_START
+    ;call    PakDump
     
 ListenForN64Loop:
     btfsc   PIN_DATAIN
@@ -360,6 +281,13 @@ ListenForN64Loop:
     btfsc   STATUS, Z
     goto N64Loop03
     
+    ; if this point is reached, no commands were identified. Wait a short time in case of any additional data
+    movlw   D'224'
+    movwf   PAUSE_REG_0
+    movlw   D'3'
+    movwf   PAUSE_REG_1
+    call    Pause2D
+    return
     
 N64LoopFF:  ; Do 0xFF (reset/info) command here
     movff   ZEROS_REG, N64_STATE_REG3 ; resets x-axis
@@ -382,11 +310,14 @@ N64Loop00:  ; Do 0x00 (info) command here
     movlw   D'1'
     movwf   PAUSE_REG_1
     
-    movff   0x05, TXREG
+    movlw   0x05
+    movwf   TXREG
     call    Pause2D
-    movff   0x00, TXREG
+    movlw   0x00
+    movwf   TXREG
     call    Pause2D
-    movff   0x02, TXREG
+    movlw   0x02
+    movwf   TXREG
 #endif
     
     goto ContinueLFNL
@@ -539,7 +470,11 @@ FileEND:
     goto ContinueLFNL
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
-    call Pause
+    movlw   D'255'
+    movwf   PAUSE_REG_0
+    movlw   D'18'
+    movwf   PAUSE_REG_1
+    call    Pause2D
     goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
     
     
