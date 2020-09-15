@@ -77,6 +77,8 @@ LowInt      code    0x0018 ; Low Priority Interrupt Vector
 #define     PIN_B           PORTE, 1
 #define     PIN_Z           PORTE, 0
 
+#define     USING_EUSART
+
 ; === REGISTERS ===
 ; ACCESS BANK  (0x00 - 0x5F)
 ZEROS_REG       equ H'00' ; Always 0x00
@@ -95,6 +97,15 @@ N64_STATE_REG3  equ H'0A' ; Buffer:  Analog Stick X-Axis ; -127 to +128
 N64_STATE_REG4  equ H'0B' ; Buffer:  Analog Stick Y-Axis ; -127 to +128
 
 TX_DATA         equ H'0C' ; Data to be transmitted to the console
+
+; Pause Clock
+PAUSE_REG_0     equ H'10'
+PAUSE_REG_1     equ H'11'
+PAUSE_REG_2     equ H'12'
+
+PAUSE_TMP_0     equ H'13'
+PAUSE_TMP_1     equ H'14'
+PAUSE_TMP_2     equ H'15'
 
 ; BANK 0  (0x60 - 0xFF)
 ; These bytes are used for temporary storage of data coming from or going to the N64 console.
@@ -194,21 +205,54 @@ Setup:
     ShiftAddrDualByte ZEROS_REG, ZEROS_REG
     ShiftIoOutByte ZEROS_REG
     
-    movlw   B'01000000'
+    movlw   B'00000000'
     movwf   H'20'
     movlw   B'00000000'
     movwf   H'21'
+    
+#ifdef USING_EUSART
+    ;movlw   D'77' ; sets baud rate to approx 9,615
+    movlw   D'2' ; sets baud rate to 250,000
+    movwf   SPBRG 
+    
+    bcf     TXSTA, SYNC
+    bsf     RCSTA, SPEN
+    bsf     TXSTA, TXEN
+    
+    bcf     RCSTA, CREN
+    
+    bsf     TRISC, 7
+    bsf     TRISC, 6
+#endif
     
 Start:
     call    ListenForN64
     goto    Start
     
 ; SUBROUTINES ;
+; uses PAUSE_REG_0 and PAUSE_REG_1 to set the intervals of each loop
+; cycles = ((PAUSE_REG_0 * 3) - 1) + ?
+Pause2D:
+    movff   PAUSE_REG_0, PAUSE_TMP_0
+    movff   PAUSE_REG_1, PAUSE_TMP_1
+    
+Pause2D_SecondLoop:
+    movff   PAUSE_REG_0, PAUSE_TMP_0
+    
+Pause2D_FirstLoop:
+    decfsz  PAUSE_TMP_0
+    goto    Pause2D_FirstLoop
+    
+    decfsz  PAUSE_TMP_1
+    goto    Pause2D_SecondLoop
+    
+    return
+    
 Pause:
     movlw   D'1'
     movwf   H'12'
 PauseThirdLoop:
-    movlw   D'10'
+    movlw   D'15'
     movwf   H'11'
 PauseSecondLoop:
     movlw   D'255'
@@ -223,6 +267,33 @@ PauseFirstLoop:
     
     return
     
+#ifdef USING_EUSART
+PakDump:
+    movlw   D'103'
+    movwf   PAUSE_REG_0
+    movlw   D'1'
+    movwf   PAUSE_REG_1
+    
+PakDumpLoop:
+    
+    ShiftAddrDualByte H'20', H'21' ; set address
+    ShiftIoInByte H'23' ; load byte
+    movff   H'23', TXREG ; transmit byte
+    
+    call    Pause2D
+    
+    ; increase address by 1
+    incf    H'21'
+    btfss   STATUS, Z
+    goto    PakDumpLoop
+    
+    incf    H'20'
+    btfss   STATUS, Z
+    goto    PakDumpLoop
+    
+    return
+#endif
+    
 TransmitByteRoutine:
     ; Utilizes TX_DATA register and PIN_DATAOUT to transmit a byte via the Joybus Protocol to the console
     TransmitByte TX_DATA, PIN_DATAOUT, 0
@@ -230,14 +301,21 @@ TransmitByteRoutine:
     
 ListenForN64:
     bsf     TRIS_DATAIO ; set to input
-    wait    D'255'                  ; waits long enough to be sure we are not inside a signal command/response
-    wait    D'255'
-    wait    D'255'
-    wait    D'255'
-    wait    D'255'
-    wait    D'255'
-    wait    D'255'
-    wait    D'231'
+    ;wait    D'255'                  ; waits long enough to be sure we are not inside a signal command/response
+    ;wait    D'255'
+    ;wait    D'255'
+    ;wait    D'255'
+    ;wait    D'255'
+    ;wait    D'255'
+    ;wait    D'255'
+    ;wait    D'231'
+    movlw   D'224'
+    movwf   PAUSE_REG_0
+    movlw   D'3'
+    movwf   PAUSE_REG_1
+    
+    btfsc   PIN_START
+    call    PakDump
     
 ListenForN64Loop:
     btfsc   PIN_DATAIN
@@ -257,6 +335,10 @@ ListenForN64Loop:
     
     bcf     TRIS_DATAIO ; set to output
     bsf     PIN_DATAOUT
+    
+#ifdef USING_EUSART
+    movff   N64_CMD_REG, TXREG
+#endif
     
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_STATE
@@ -290,9 +372,22 @@ N64Loop00:  ; Do 0x00 (info) command here
     
     TransmitByte 0x05, PIN_DATAOUT, 1
     TransmitByte 0x00, PIN_DATAOUT, 1
-    TransmitByte 0x01, PIN_DATAOUT, 1
+    TransmitByte 0x02, PIN_DATAOUT, 1
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
+    
+#ifdef USING_EUSART
+    movlw   D'170'
+    movwf   PAUSE_REG_0
+    movlw   D'1'
+    movwf   PAUSE_REG_1
+    
+    movff   0x05, TXREG
+    call    Pause2D
+    movff   0x00, TXREG
+    call    Pause2D
+    movff   0x02, TXREG
+#endif
     
     goto ContinueLFNL
     
@@ -320,8 +415,11 @@ N64Loop01:  ; Do 0x01 (state) command here
 ContAfterRstCheck:
     CopyRegBitToRegBit  PIN_LT,     N64_STATE_REG2, 5
     CopyRegBitToRegBit  PIN_RT,     N64_STATE_REG2, 4
+#ifdef USING_EUSART
+#else
     CopyRegBitToRegBit  PIN_cU,     N64_STATE_REG2, 3
     CopyRegBitToRegBit  PIN_cD,     N64_STATE_REG2, 2
+#endif
     CopyRegBitToRegBit  PIN_cL,     N64_STATE_REG2, 1
     CopyRegBitToRegBit  PIN_cR,     N64_STATE_REG2, 0
     
@@ -334,6 +432,21 @@ ContAfterRstCheck:
     TransmitByte N64_STATE_REG4, PIN_DATAOUT, 0
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
+    
+#ifdef USING_EUSART
+    movlw   D'170'
+    movwf   PAUSE_REG_0
+    movlw   D'1'
+    movwf   PAUSE_REG_1
+    
+    movff   N64_STATE_REG1, TXREG
+    call    Pause2D
+    movff   N64_STATE_REG2, TXREG
+    call    Pause2D
+    movff   N64_STATE_REG3, TXREG
+    call    Pause2D
+    movff   N64_STATE_REG4, TXREG
+#endif
     
     goto ContinueLFNL
     
@@ -359,12 +472,66 @@ i += 1
     bcf     N64_DATA_TMP1, 0
     ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
     
+    movf    N64_DATA_TMP0, 0
+    xorlw   B'10000000'
+    btfsc   STATUS, Z
+    goto    File8000
+    goto    File0020
+    
+File8000:
 i = 0
+    movlw   B'11111110' ; 0xFE
     while i < 32
-    movff   ONES_REG, TX_DATA
-    call TransmitByteRoutine
+    movwf   TX_DATA
+    call    TransmitByteRoutine
 i += 1
     endw
+    
+    goto    FileEND
+File0020:
+    TXByTmp 0x00
+    TXByTmp 0x2D
+    TXByTmp 0x00
+    TXByTmp 0x00
+    
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x3B
+    TXByTmp 0x74
+    ;
+    TXByTmp 0x00
+    TXByTmp 0x40
+    TXByTmp 0xBF
+    TXByTmp 0x67
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    ;
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    TXByTmp 0x00
+    ;
+    TXByTmp 0x00
+    TXByTmp 0x01
+    
+    TXByTmp 0x01
+    
+    TXByTmp 0x00
+    
+    TXByTmp 0xFC
+    TXByTmp 0x49
+    
+    TXByTmp 0x03
+    TXByTmp 0xA9
+    ;
+    
+FileEND:
     
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0

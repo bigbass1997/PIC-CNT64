@@ -235,3 +235,11 @@ i += 1
     movwf   reg
     
     endm
+    
+; temporary macro to transmit literals to console
+TXByTmp	    macro lit
+    movlw   lit
+    movwf   TX_DATA
+    call TransmitByteRoutine
+    
+    endm
