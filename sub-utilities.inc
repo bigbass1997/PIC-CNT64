@@ -56,3 +56,40 @@ PakDumpLoop:
     
     return
 #endif
+    
+; loads 4us of data from data pin and determines what type of protocol bit it is
+; NOTICE: Very expensive for program memory, to use this macro
+DetermineDataToByte:
+    local i = 7
+    while i >= 0
+    
+    movlw   B'11111111'
+    movwf   N64_BIT_REG             ; reset N64_BIT_REG
+    
+    SetIfDataLow 3
+    wait    D'8'
+    
+    SetIfDataLow 2
+    wait    D'10'
+    
+    SetIfDataLow 1
+    wait    D'10'
+    
+    SetIfDataLow 0                  ; 2/12
+    
+    movf    N64_BIT_REG, 0          ; 3/12
+    xorlw   N64_BIT_ZERO            ; 4/12
+    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
+    bcf     N64_DATA_DETER, i    ; 6/12
+    
+    movf    N64_BIT_REG, 0          ; 7/12
+    xorlw   N64_BIT_ONE             ; 8/12
+    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
+    bsf     N64_DATA_DETER, i    ;10/12
+    
+    wait    D'3'                    ;12/12
+    
+i -= 1
+    endw
+    
+    return

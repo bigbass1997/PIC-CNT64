@@ -111,10 +111,11 @@ PAUSE_TMP_2     equ H'15'
 ; These bytes are used for temporary storage of data coming from or going to the N64 console.
 ; While only 4 addresses are defined, this whole section of memory is dedicated for this purpose.
 ; Remember to specify in every instruction to use the BSR instead of Access memory.
-N64_DATA_TMP0   equ H'60'
-N64_DATA_TMP1   equ H'61'
-N64_DATA_TMP2   equ H'62'
-N64_DATA_TMP3   equ H'63'
+N64_DATA_DETER  equ H'60'
+N64_DATA_TMP0   equ H'61'
+N64_DATA_TMP1   equ H'62'
+N64_DATA_TMP2   equ H'63'
+N64_DATA_TMP3   equ H'64'
 
 ; === CONSTANT BYTES ===
 N64_CMD_RESET       equ H'FF'
@@ -242,14 +243,8 @@ ListenForN64Loop:
     btfsc   PIN_DATAIN
     goto    ListenForN64Loop        ; wait until datapin goes LOW
     
-    DetermineDataToBit 7, N64_CMD_REG, 1
-    DetermineDataToBit 6, N64_CMD_REG, 1
-    DetermineDataToBit 5, N64_CMD_REG, 1
-    DetermineDataToBit 4, N64_CMD_REG, 1
-    DetermineDataToBit 3, N64_CMD_REG, 1
-    DetermineDataToBit 2, N64_CMD_REG, 1
-    DetermineDataToBit 1, N64_CMD_REG, 1
-    DetermineDataToBit 0, N64_CMD_REG, 1
+    call    DetermineDataToByte
+    movff   N64_DATA_DETER, N64_CMD_REG
     ; N64_CMD_REG is now set with command from N64 console
     ; Below is where N64_CMD_REG will be checked against each Protocol command
     ; (in order of most to least common command)
@@ -382,19 +377,10 @@ ContAfterRstCheck:
     goto ContinueLFNL
     
 N64Loop02: ; Do 0x02 (read accessory port) command here
-    local i = 0
-    
-    while i < 2 ; read the next 2 bytes from the console
-    DetermineDataToBit 7, N64_DATA_TMP#v(i), 1
-    DetermineDataToBit 6, N64_DATA_TMP#v(i), 1
-    DetermineDataToBit 5, N64_DATA_TMP#v(i), 1
-    DetermineDataToBit 4, N64_DATA_TMP#v(i), 1
-    DetermineDataToBit 3, N64_DATA_TMP#v(i), 1
-    DetermineDataToBit 2, N64_DATA_TMP#v(i), 1
-    DetermineDataToBit 1, N64_DATA_TMP#v(i), 1
-    DetermineDataToBit 0, N64_DATA_TMP#v(i), 1
-i += 1
-    endw
+    call    DetermineDataToByte
+    movff   N64_DATA_DETER, N64_DATA_TMP0
+    call    DetermineDataToByte
+    movff   N64_DATA_DETER, N64_DATA_TMP1
     
     bcf     N64_DATA_TMP1, 4
     bcf     N64_DATA_TMP1, 3
