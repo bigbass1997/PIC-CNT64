@@ -107,6 +107,10 @@ PAUSE_TMP_0     equ H'13'
 PAUSE_TMP_1     equ H'14'
 PAUSE_TMP_2     equ H'15'
 
+; Auxillary Loop Counters
+LOOP_COUNT_0    equ H'16'
+LOOP_COUNT_1    equ H'17'
+
 ; BANK 0  (0x60 - 0xFF)
 ; These bytes are used for temporary storage of data coming from or going to the N64 console.
 ; While only 4 addresses are defined, this whole section of memory is dedicated for this purpose.
@@ -295,7 +299,7 @@ N64Loop00:  ; Do 0x00 (info) command here
     
     TransmitByte 0x05, PIN_DATAOUT, 1
     TransmitByte 0x00, PIN_DATAOUT, 1
-    TransmitByte 0x02, PIN_DATAOUT, 1
+    TransmitByte 0x01, PIN_DATAOUT, 1
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
@@ -311,7 +315,7 @@ N64Loop00:  ; Do 0x00 (info) command here
     movlw   0x00
     movwf   TXREG
     call    Pause2D
-    movlw   0x02
+    movlw   0x01
     movwf   TXREG
 #endif
     
@@ -456,11 +460,40 @@ FileEND:
     goto ContinueLFNL
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
-    movlw   D'255'
+    ;movlw   D'255'
+    ;movwf   PAUSE_REG_0
+    ;movlw   D'18'
+    ;movwf   PAUSE_REG_1
+    ;call    Pause2D
+    call    DetermineDataToByte
+    movff   N64_DATA_DETER, N64_DATA_TMP0
+    call    DetermineDataToByte
+    movff   N64_DATA_DETER, N64_DATA_TMP1
+    
+    lfsr    2, N64_DATA_TMP0
+    movlw   D'32'
+    movwf   LOOP_COUNT_0
+N64Loop03_DecodeLoop:
+    call    DetermineDataToByte
+    movff   N64_DATA_DETER, POSTINC2
+    decfsz  LOOP_COUNT_0
+    goto    N64Loop03_DecodeLoop
+    
+    lfsr    2, N64_DATA_TMP0
+    movlw   D'32'
+    movwf   LOOP_COUNT_0
+    movlw   D'170'
     movwf   PAUSE_REG_0
-    movlw   D'18'
+    movlw   D'1'
     movwf   PAUSE_REG_1
+N64Loop03_DebugLoop:
+    movff   POSTINC2, TXREG
     call    Pause2D
+    decfsz  LOOP_COUNT_0
+    goto    N64Loop03_DebugLoop
+    
+    bcf     TRIS_DATAIO ; set to output
+    bsf     PIN_DATAOUT
     goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
     
     

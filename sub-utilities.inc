@@ -58,16 +58,44 @@ PakDumpLoop:
 #endif
     
 ; loads 4us of data from data pin and determines what type of protocol bit it is
-; NOTICE: Very expensive for program memory, to use this macro
 DetermineDataToByte:
-    local i = 7
-    while i >= 0
-    
-    movlw   B'11111111'
-    movwf   N64_BIT_REG             ; reset N64_BIT_REG
+    ; ITERATION #0
+    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
     
     SetIfDataLow 3
-    wait    D'8'
+    wait    D'7'		    ; 2 less than normal due to 'call' instruction
+    
+    SetIfDataLow 2
+    wait    D'10'
+    
+    SetIfDataLow 1
+    wait    D'10'
+    
+    SetIfDataLow 0                  ; 2/12
+    
+    movf    N64_BIT_REG, 0          ; 3/12
+    xorlw   N64_BIT_ZERO            ; 4/12
+    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
+    bcf     N64_DATA_DETER, 7    ; 6/12
+    
+    movf    N64_BIT_REG, 0          ; 7/12
+    xorlw   N64_BIT_ONE             ; 8/12
+    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
+    bsf     N64_DATA_DETER, 7    ;10/12
+    
+    wait    D'3'                    ;12/12
+    
+    ; ITERATION #1-6
+    local i = 6
+    while i >= 1
+    
+    ;movlw   B'11111111'
+    ;movwf   N64_BIT_REG             ; reset N64_BIT_REG
+    
+    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
+    
+    SetIfDataLow 3
+    wait    D'9'
     
     SetIfDataLow 2
     wait    D'10'
@@ -91,5 +119,32 @@ DetermineDataToByte:
     
 i -= 1
     endw
+    
+    ; ITERATION #7
+    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
+    
+    SetIfDataLow 3
+    wait    D'9'
+    
+    SetIfDataLow 2
+    wait    D'10'
+    
+    SetIfDataLow 1
+    wait    D'10'
+    
+    SetIfDataLow 0                  ; 2/12
+    
+    movf    N64_BIT_REG, 0          ; 3/12
+    xorlw   N64_BIT_ZERO            ; 4/12
+    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
+    bcf     N64_DATA_DETER, 0    ; 6/12
+    
+    movf    N64_BIT_REG, 0          ; 7/12
+    xorlw   N64_BIT_ONE             ; 8/12
+    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
+    bsf     N64_DATA_DETER, 0    ;10/12
+    
+    ; 'return' instruction uses last 2 cycles
+    wait D'1'
     
     return
