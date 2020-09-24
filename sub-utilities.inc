@@ -170,11 +170,7 @@ DDTB_BitLoop:
     
     wait    D'3'		; 1, 12/12
     wait    D'12'		; 2, 12/12
-    ;wait    D'2'		; 3, 3/12
-    
-    ;wait    D'0' ;DEBUG		; 3, 3/12
-    bsf     PIN_ADDR_SER ; DEBUG
-    bcf     PIN_ADDR_SER ; DEBUG
+    wait    D'2'		; 3, 3/12
     
     bsf	    STATUS, C
     btfss   PIN_DATAIN		; 3, 4/12
@@ -193,12 +189,9 @@ DDTB_BitLoop:
     dcfsnz  LOOP_COUNT_0
     goto    DDTB_End
     ; 4, 2/12
-    ;bsf     PIN_ADDR_SER ; DEBUG
-    ;bcf     PIN_ADDR_SER ; DEBUG
-    ;wait    D'9'     ;DEBUG	; 5(1), 2/12
     
-    wait    D'11'		; 5(1), 2/12
-    goto    DDTB_BitLoop	; 5(1), 4/12 ; to match DDTB_BitLoop's start cycle
+    wait    D'11'
+    goto    DDTB_BitLoop
     
 DDTB_ByteInvalid:
     bsf	    UTIL_FLAGS, 7	; byte is invalid, no bit was detected
