@@ -98,6 +98,10 @@ N64_STATE_REG4  equ H'0B' ; Buffer:  Analog Stick Y-Axis ; -127 to +128
 
 TX_DATA         equ H'0C' ; Data to be transmitted to the console
 
+UTIL_FLAGS      equ H'0D' ; Utility Flags, initalized with 0x00
+; <7> If set, determined byte is invalid, decoding should halt
+; <6:0> Unused
+
 ; Pause Clock
 PAUSE_REG_0     equ H'10'
 PAUSE_REG_1     equ H'11'
@@ -167,10 +171,9 @@ Setup:
                             ; Interrupt 0 is always high priority
     ;bcf     INTCON2, INTEDG0; Clear INT0 Interrupt to detect on falling edge
     
-    movlw   B'00000000'
-    movwf   ZEROS_REG
-    movlw   B'11111111'
-    movwf   ONES_REG
+    clrf   ZEROS_REG
+    setf   ONES_REG
+    clrf   UTIL_FLAGS
     
     bsf     ADCON1, PCFG3
     
@@ -247,8 +250,23 @@ ListenForN64Loop:
     btfsc   PIN_DATAIN
     goto    ListenForN64Loop        ; wait until datapin goes LOW
     
-    call    DetermineDataToByte
+    call    DetermineDataToByte2
     movff   N64_DATA_DETER, N64_CMD_REG
+    
+    lfsr    2, N64_DATA_TMP0
+LFNL_DecodeLoop:
+    btfsc   PIN_DATAIN
+    goto    LFNL_DecodeLoop         ; wait until datapin goes LOW, if not already
+    
+    call    DetermineDataToByte2    ; will have 7 cycles left over
+    movff   N64_DATA_DETER, POSTINC2
+    btfss   UTIL_FLAGS, 7
+    goto    LFNL_DecodeLoop         ; if not skipped, 7 cycles will have been consumed after jumping
+    
+    bcf     UTIL_FLAGS, 7
+    
+    lfsr    2, N64_DATA_TMP0        ; reset FSR for command usage as needed
+    
     ; N64_CMD_REG is now set with command from N64 console
     ; Below is where N64_CMD_REG will be checked against each Protocol command
     ; (in order of most to least common command)
@@ -295,8 +313,6 @@ N64LoopFF:  ; Do 0xFF (reset/info) command here
     ; continue to N64Loop00...
     
 N64Loop00:  ; Do 0x00 (info) command here
-    wait D'27'  ; this assumes console stop bit occured
-    
     TransmitByte 0x05, PIN_DATAOUT, 1
     TransmitByte 0x00, PIN_DATAOUT, 1
     TransmitByte 0x01, PIN_DATAOUT, 1
@@ -381,11 +397,7 @@ ContAfterRstCheck:
     goto ContinueLFNL
     
 N64Loop02: ; Do 0x02 (read accessory port) command here
-    call    DetermineDataToByte
-    movff   N64_DATA_DETER, N64_DATA_TMP0
-    call    DetermineDataToByte
-    movff   N64_DATA_DETER, N64_DATA_TMP1
-    
+    ; CRC is currently ignored, TODO: verify CRC is valid
     bcf     N64_DATA_TMP1, 4
     bcf     N64_DATA_TMP1, 3
     bcf     N64_DATA_TMP1, 2
@@ -453,7 +465,6 @@ File0020:
     ;
     
 FileEND:
-    
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
@@ -465,19 +476,6 @@ N64Loop03: ; Do 0x03 (write accessory port) command here
     ;movlw   D'18'
     ;movwf   PAUSE_REG_1
     ;call    Pause2D
-    call    DetermineDataToByte
-    movff   N64_DATA_DETER, N64_DATA_TMP0
-    call    DetermineDataToByte
-    movff   N64_DATA_DETER, N64_DATA_TMP1
-    
-    lfsr    2, N64_DATA_TMP0
-    movlw   D'32'
-    movwf   LOOP_COUNT_0
-N64Loop03_DecodeLoop:
-    call    DetermineDataToByte
-    movff   N64_DATA_DETER, POSTINC2
-    decfsz  LOOP_COUNT_0
-    goto    N64Loop03_DecodeLoop
     
     lfsr    2, N64_DATA_TMP0
     movlw   D'32'
@@ -492,8 +490,8 @@ N64Loop03_DebugLoop:
     decfsz  LOOP_COUNT_0
     goto    N64Loop03_DebugLoop
     
-    bcf     TRIS_DATAIO ; set to output
-    bsf     PIN_DATAOUT
+    ; TODO: respond with 8bit CRC for the last 32 bytes
+    
     goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
     
     

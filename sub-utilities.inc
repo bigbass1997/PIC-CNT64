@@ -58,93 +58,151 @@ PakDumpLoop:
 #endif
     
 ; loads 4us of data from data pin and determines what type of protocol bit it is
-DetermineDataToByte:
-    ; ITERATION #0
-    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
+;DetermineDataToByte:
+;    ; ITERATION #0
+;    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
+;    
+;    SetIfDataLow 3
+;    wait    D'7'		    ; 2 less than normal due to 'call' instruction
+;    
+;    SetIfDataLow 2
+;    wait    D'10'
+;    
+;    SetIfDataLow 1
+;    wait    D'10'
+;    
+;    SetIfDataLow 0                  ; 2/12
+;    
+;    movf    N64_BIT_REG, 0          ; 3/12
+;    xorlw   N64_BIT_ZERO            ; 4/12
+;    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
+;    bcf     N64_DATA_DETER, 7    ; 6/12
+;    
+;    movf    N64_BIT_REG, 0          ; 7/12
+;    xorlw   N64_BIT_ONE             ; 8/12
+;    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
+;    bsf     N64_DATA_DETER, 7    ;10/12
+;    
+;    wait    D'3'                    ;12/12
+;    
+;    ; ITERATION #1-6
+;    local i = 6
+;    while i >= 1
+;    
+;    ;movlw   B'11111111'
+;    ;movwf   N64_BIT_REG             ; reset N64_BIT_REG
+;    
+;    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
+;    
+;    SetIfDataLow 3
+;    wait    D'9'
+;    
+;    SetIfDataLow 2
+;    wait    D'10'
+;    
+;    SetIfDataLow 1
+;    wait    D'10'
+;    
+;    SetIfDataLow 0                  ; 2/12
+;    
+;    movf    N64_BIT_REG, 0          ; 3/12
+;    xorlw   N64_BIT_ZERO            ; 4/12
+;    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
+;    bcf     N64_DATA_DETER, i    ; 6/12
+;    
+;    movf    N64_BIT_REG, 0          ; 7/12
+;    xorlw   N64_BIT_ONE             ; 8/12
+;    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
+;    bsf     N64_DATA_DETER, i    ;10/12
+;    
+;    wait    D'3'                    ;12/12
+;    
+;i -= 1
+;    endw
+;    
+;    ; ITERATION #7
+;    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
+;    
+;    SetIfDataLow 3
+;    wait    D'9'
+;    
+;    SetIfDataLow 2
+;    wait    D'10'
+;    
+;    SetIfDataLow 1
+;    wait    D'10'
+;    
+;    SetIfDataLow 0                  ; 2/12
+;    
+;    movf    N64_BIT_REG, 0          ; 3/12
+;    xorlw   N64_BIT_ZERO            ; 4/12
+;    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
+;    bcf     N64_DATA_DETER, 0    ; 6/12
+;    
+;    movf    N64_BIT_REG, 0          ; 7/12
+;    xorlw   N64_BIT_ONE             ; 8/12
+;    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
+;    bsf     N64_DATA_DETER, 0    ;10/12
+;    
+;    ; 'return' instruction uses last 2 cycles
+;    wait D'1'
+;    
+;    return
     
-    SetIfDataLow 3
-    wait    D'7'		    ; 2 less than normal due to 'call' instruction
     
-    SetIfDataLow 2
-    wait    D'10'
+; Has the same result as DetermineDataToByte but calculates it entirely differently
+; Instead of sampling every 1us, it only checks the 1st and 3rd microsecond.
+; If first sample is HIGH, the byte is invalid and reading should stop.
+; If both are LOW, bit is Zero
+; If first is LOW, second is HIGH, bit is One
+DetermineDataToByte2:
+    movlw   D'8'
+    movwf   LOOP_COUNT_0
     
-    SetIfDataLow 1
-    wait    D'10'
+DDTB_BitLoop:
+    ; 4/12
+    setf    N64_BIT_REG		; 1, 5/12
     
-    SetIfDataLow 0                  ; 2/12
+    bsf	    STATUS, C		; 1, 6/12
+    btfss   PIN_DATAIN		; 1, 7/12
+    bcf     STATUS, C
+    rlcf    N64_BIT_REG, 1	; 1, 9/12
     
-    movf    N64_BIT_REG, 0          ; 3/12
-    xorlw   N64_BIT_ZERO            ; 4/12
-    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
-    bcf     N64_DATA_DETER, 7    ; 6/12
+    wait    D'3'		; 1, 12/12
+    wait    D'12'		; 2, 12/12
+    ;wait    D'2'		; 3, 3/12
     
-    movf    N64_BIT_REG, 0          ; 7/12
-    xorlw   N64_BIT_ONE             ; 8/12
-    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
-    bsf     N64_DATA_DETER, 7    ;10/12
+    ;wait    D'0' ;DEBUG		; 3, 3/12
+    bsf     PIN_ADDR_SER ; DEBUG
+    bcf     PIN_ADDR_SER ; DEBUG
     
-    wait    D'3'                    ;12/12
+    bsf	    STATUS, C
+    btfss   PIN_DATAIN		; 3, 4/12
+    bcf     STATUS, C
+    rlcf    N64_BIT_REG, 1	; 3, 6/12
     
-    ; ITERATION #1-6
-    local i = 6
-    while i >= 1
+    btfsc   N64_BIT_REG, 1
+    goto    DDTB_ByteInvalid
+    ; 3, 8/12
     
-    ;movlw   B'11111111'
-    ;movwf   N64_BIT_REG             ; reset N64_BIT_REG
+    bsf	    STATUS, C
+    btfss   N64_BIT_REG, 0
+    bcf	    STATUS, C
+    rlcf    N64_DATA_DETER	; 3, 12/12
     
-    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
+    dcfsnz  LOOP_COUNT_0
+    goto    DDTB_End
+    ; 4, 2/12
+    ;bsf     PIN_ADDR_SER ; DEBUG
+    ;bcf     PIN_ADDR_SER ; DEBUG
+    ;wait    D'9'     ;DEBUG	; 5(1), 2/12
     
-    SetIfDataLow 3
-    wait    D'9'
+    wait    D'11'		; 5(1), 2/12
+    goto    DDTB_BitLoop	; 5(1), 4/12 ; to match DDTB_BitLoop's start cycle
     
-    SetIfDataLow 2
-    wait    D'10'
+DDTB_ByteInvalid:
+    bsf	    UTIL_FLAGS, 7	; byte is invalid, no bit was detected
     
-    SetIfDataLow 1
-    wait    D'10'
-    
-    SetIfDataLow 0                  ; 2/12
-    
-    movf    N64_BIT_REG, 0          ; 3/12
-    xorlw   N64_BIT_ZERO            ; 4/12
-    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
-    bcf     N64_DATA_DETER, i    ; 6/12
-    
-    movf    N64_BIT_REG, 0          ; 7/12
-    xorlw   N64_BIT_ONE             ; 8/12
-    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
-    bsf     N64_DATA_DETER, i    ;10/12
-    
-    wait    D'3'                    ;12/12
-    
-i -= 1
-    endw
-    
-    ; ITERATION #7
-    setf    N64_BIT_REG		    ; reset N64_BIT_REG ; 1 cycle
-    
-    SetIfDataLow 3
-    wait    D'9'
-    
-    SetIfDataLow 2
-    wait    D'10'
-    
-    SetIfDataLow 1
-    wait    D'10'
-    
-    SetIfDataLow 0                  ; 2/12
-    
-    movf    N64_BIT_REG, 0          ; 3/12
-    xorlw   N64_BIT_ZERO            ; 4/12
-    btfsc   STATUS, Z               ; 5/12  if N64_BIT_REG != N64_BIT_ZERO then skip the next instruction
-    bcf     N64_DATA_DETER, 0    ; 6/12
-    
-    movf    N64_BIT_REG, 0          ; 7/12
-    xorlw   N64_BIT_ONE             ; 8/12
-    btfsc   STATUS, Z               ; 9/12  if N64_BIT_REG != N64_BIT_ONE then skip the next instruction
-    bsf     N64_DATA_DETER, 0    ;10/12
-    
-    ; 'return' instruction uses last 2 cycles
-    wait D'1'
-    
-    return
+DDTB_End:
+    return  ; If byte was valid, cycle should be: 4, 5/12, leaving 7 cycles free
+ 
