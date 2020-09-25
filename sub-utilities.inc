@@ -198,4 +198,42 @@ DDTB_ByteInvalid:
     
 DDTB_End:
     return  ; If byte was valid, cycle should be: 4, 5/12, leaving 7 cycles free
- 
+    
+    
+; This reads 32 bytes starting at N64_DATA_TMP2 register,
+; and generates a 1 byte CRC to send back to the console.
+; The byte is stored in the W register.
+CRC32Bytes:
+    movlw   D'32'
+    movwf   LOOP_COUNT_0
+    clrf    LOOP_COUNT_1
+    bsf	    LOOP_COUNT_1, 3
+    clrf    WREG
+    
+    lfsr    2, N64_DATA_TMP1
+CRC_ByteLoop:
+    movff   PREINC2, N64_DATA_DETER ; junk move to increment FSR
+    bsf	    LOOP_COUNT_1, 3
+CRC_BitLoop:
+    rlcf    INDF2
+    rlcf    WREG
+    btfsc   STATUS, C
+    xorlw   B'10000101'
+    
+    decfsz  LOOP_COUNT_1
+    goto    CRC_BitLoop
+    
+    decfsz  LOOP_COUNT_0
+    goto    CRC_ByteLoop
+    
+    bsf	    LOOP_COUNT_1, 3
+CRC_FinalLoop:
+    bcf	    STATUS, C
+    rlcf    WREG
+    btfsc   STATUS, C
+    xorlw   B'10000101'
+    
+    decfsz  LOOP_COUNT_1
+    goto    CRC_FinalLoop
+    
+    return

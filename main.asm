@@ -471,26 +471,35 @@ FileEND:
     goto ContinueLFNL
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
-    ;movlw   D'255'
+    ;movlw   D'213'
     ;movwf   PAUSE_REG_0
-    ;movlw   D'18'
+    ;movlw   D'1'
     ;movwf   PAUSE_REG_1
     ;call    Pause2D
+    ;nop
+    ;nop
+    ;nop
     
-    lfsr    2, N64_DATA_TMP0
-    movlw   D'32'
-    movwf   LOOP_COUNT_0
-    movlw   D'170'
-    movwf   PAUSE_REG_0
-    movlw   D'1'
-    movwf   PAUSE_REG_1
-N64Loop03_DebugLoop:
-    movff   POSTINC2, TXREG
-    call    Pause2D
-    decfsz  LOOP_COUNT_0
-    goto    N64Loop03_DebugLoop
+    call    CRC32Bytes
+    ;movlw   0xE1
+    movwf   TX_DATA
+    call    TransmitByteRoutine
+    wait D'5'
+    TransmitContStopBit PIN_DATAOUT, 0
+    movwf   TXREG
     
-    ; TODO: respond with 8bit CRC for the last 32 bytes
+;    lfsr    2, N64_DATA_TMP0
+;    movlw   D'32'
+;    movwf   LOOP_COUNT_0
+;    movlw   D'170'
+;    movwf   PAUSE_REG_0
+;    movlw   D'1'
+;    movwf   PAUSE_REG_1
+;N64Loop03_DebugLoop:
+;    movff   POSTINC2, TXREG
+;    call    Pause2D
+;    decfsz  LOOP_COUNT_0
+;    goto    N64Loop03_DebugLoop
     
     goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
     
