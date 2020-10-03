@@ -1,83 +1,63 @@
-    include "p18lf4550.inc"
+    include "p18lf47k42.inc"
     include "macros.inc"
-    processor 18lf4550
+    processor 18lf47k42
     
-    CONFIG WDT = OFF
-    CONFIG MCLRE = OFF
-    CONFIG DEBUG = OFF
-    CONFIG LVP = OFF
+    CONFIG WDTE = OFF
+    CONFIG DEBUG = ON
+    CONFIG LVP = ON
+    CONFIG MCLRE = EXTMCLR
+    CONFIG MVECEN = ON
     
-    CONFIG PBADEN = OFF
-    
-    CONFIG PLLDIV = 2
-    CONFIG FOSC = HSPLL_HS
-    CONFIG CPUDIV = OSC1_PLL2
-    CONFIG USBDIV = 2
+    CONFIG RSTOSC = HFINTOSC_64MHZ
     
     CONFIG XINST = ON
     
 ResVec      code	0x0000
     goto    Setup
-
-;;; UNUSED AT THE MOMENT ;;;
-HighInt     code    0x0008 ; High Priority Interrupt Vector
-    ;btfsc   INTCON3, INT0IF
-    ;goto    HandleN64CommandInterrupt
-    bcf     INTCON3, INT0IF ; clear interrupt flag
-    retfie 1
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-LowInt      code    0x0018 ; Low Priority Interrupt Vector
-    btfsc   INTCON, RBIF
-    goto    HandleXAInterrupt
     
-    btfsc   INTCON3, INT2IF
-    goto    HandleYAInterrupt
-    btfsc   INTCON3, INT1IF
-    goto    HandleYAInterrupt
+;   Interrupt Table is in use. Base is set to default 0x0008
+IOCInt      code    0x0016
+    goto    HandleIOCInterrupt
     
-    retfie 1
-
+    
 ; === DEFINE PINS (text substitutions) ===
 ; refer to pinout documentation for more information
 ; reminder: all button input pins should be pulled-DOWN (default state is cleared aka 0)
 ;           connect pin to power to set button to a "pressed" state
 
-#define     PIN_IO_CLK      LATA,  5
-#define     PIN_IO_SER_OUT  LATA,  4
-#define     PIN_IO_S1       LATA,  3
-#define     PIN_IO_SER_IN   PORTA, 2
-#define     PIN_IO_OE1      LATA,  1
-#define     PIN_MEM_RW      LATA,  0
+#define     PIN_cR          PORTA, 5
+#define     PIN_cL          PORTA, 4
+#define     PIN_cD          PORTA, 3
+#define     PIN_cU          PORTA, 2
+#define     PIN_B           PORTA, 1
+#define     PIN_A           PORTA, 0
 
-#define     PIN_ASTICK_XA   PORTB, 4
-#define     PIN_ADDR_SER    LATB,  3
-#define     PIN_ASTICK_YA   PORTB, 1
+#define     PIN_ASTICK_XA   PORTB, 5
+#define     PIN_ASTICK_XB   PORTB, 4
+#define     PIN_ASTICK_YB   PORTB, 3
+#define     PIN_ASTICK_YA   PORTB, 2
 
-#define     PIN_cU          PORTC, 7
-#define     PIN_cD          PORTC, 6
-#define     PIN_cL          PORTC, 5
-#define     PIN_cR          PORTC, 4
-#define     PIN_LT          PORTC, 2
-#define     PIN_RT          PORTC, 1
-#define     PIN_START       PORTC, 0
+#define     PIN_MEM_RW      LATC,  7
+#define     PIN_IO_OE1      LATC,  6
+#define     PIN_IO_SER_IN   PORTC, 5
+#define     PIN_IO_S1       LATC,  4
+#define     PIN_dR          PORTC, 3
+#define     PIN_dL          PORTC, 2
+#define     PIN_dD          PORTC, 1
+#define     PIN_dU          PORTC, 0
 
-#define     PIN_ASTICK_XB   PORTD, 7
-#define     PIN_ASTICK_YB   PORTD, 6
-#define     PIN_dU          PORTD, 5
-#define     PIN_dD          PORTD, 4
-#define     PIN_dL          PORTD, 3
-#define     PIN_dR          PORTD, 2
-#define     PIN_ADDR_CLK    LATD,  1
-#define     PIN_DATAIN      PORTD, 0
-#define     PIN_DATAOUT     LATD,  0     ; LAT register is used for writing data out
-#define     TRIS_DATAIO     TRISD, 0
-
-#define     PIN_A           PORTE, 2
-#define     PIN_B           PORTE, 1
-#define     PIN_Z           PORTE, 0
-
-#define     USING_EUSART
+#define     PIN_ADDR_CLK    LATD,  5
+#define     PIN_ADDR_SER    LATD,  4
+#define     PIN_IO_SER_OUT  LATD,  3
+#define     PIN_IO_CLK      LATD,  2
+#define     PIN_DATAIN      PORTD, 1
+#define     PIN_DATAOUT     LATD,  1     ; LAT register is used for writing data out
+#define     TRIS_DATAIO     TRISD, 1
+#define     PIN_Z           PORTD, 0
+    
+#define     PIN_START       PORTE, 2
+#define     PIN_RT          PORTE, 1
+#define     PIN_LT          PORTE, 0
 
 ; === REGISTERS ===
 ; ACCESS BANK  (0x00 - 0x5F)
@@ -139,69 +119,74 @@ N64_BIT_CONSSTP equ B'11110111' ; bit #0 is not technically used, but for ease o
 N64_BIT_CONTSTP equ B'11110011'
 
 Setup:
+    movlb   B'00000000' ; sets current GPR bank to bank 0
+    
+    clrf    FSR2H
     movlw   B'00000000'
     movwf   FSR2L ; sets access bank start location to 0x00
     
-    movlb   B'00000000' ; sets current GPR bank to bank 0
     
-    bsf     RCON, IPEN      ; enable interrupt feature
-    bsf     INTCON, GIEH    ; enable high priority interrupts
-    bsf     INTCON, GIEL    ; enable low priority interrupts
+    ; === Peripheral Pin Select ===
+    BANKSEL RB0PPS
+    movlw   B'00010110'
+    movwf   RB0PPS      ; Set U2TX to pin RB0
     
-    ; Connected on RB4 ; Detects changing edge of stick XA
-    bcf     INTCON, RBIF    ; Clear the PORTB Interrupt flag, for safety
-    bsf     INTCON, RBIE    ; Set the PORTB Interrupt enable bit
-    bcf     INTCON2, RBIP   ; Clear the PORTB Interrupt priority bit (low priority)
+    ; === Interrupts ===
+    ;BANKSEL PIE0
+    ;bsf     PIE0, IOCIE     ; enable Interrupt-On-Change feature
     
-    ; INT2 == RB2 ; Detect the rising edge of stick YA
-    bcf     INTCON3, INT2IF ; Clear the INT2 Interrupt flag, for safety
-    bsf     INTCON3, INT2IE ; Set the INT2 Interrupt enable bit
-    bcf     INTCON3, INT2IP ; Clear the INT2 Interrupt priority bit (low priority)
-    bsf     INTCON2, INTEDG2; Set INT2 Interrupt to detect on rising edge
+    ;BANKSEL IOCBP
+    ;bsf     IOCBP, 5        ; enable IOC rising-edge on RB5
+    ;bsf     IOCBN, 5        ; enable IOC falling-edge on RB5
+    ;bsf     IOCBP, 2        ; enable IOC rising-edge on RB2
+    ;bsf     IOCBN, 2        ; enable IOC falling-edge on RB2
     
-    ; INT1 == RB1 ; Detect the falling edge of stick YA
-    bcf     INTCON3, INT1IF ; Clear the INT1 Interrupt flag, for safety
-    bsf     INTCON3, INT1IE ; Set the INT1 Interrupt enable bit
-    bcf     INTCON3, INT1IP ; Clear the INT1 Interrupt priority bit (low priority)
-    bcf     INTCON2, INTEDG1; Clear INT1 Interrupt to detect on falling edge
+    ;BANKSEL INTCON0
+    ;bsf     INTCON0, GIE    ; enable interrupt feature
     
-    ; INT0 == RB0 ; Detect the falling edge of console command
-    ;bcf     INTCON, INT0IF ; Clear the Interrupt 0 flag, for safety
-    ;bsf     INTCON, INT0IE ; Set the Interrupt 0 enable bit
-                            ; Interrupt 0 is always high priority
-    ;bcf     INTCON2, INTEDG0; Clear INT0 Interrupt to detect on falling edge
-    
-    clrf   ZEROS_REG
-    setf   ONES_REG
-    clrf   UTIL_FLAGS
-    
-    bsf     ADCON1, PCFG3
+    movlb   B'00000000'
+    ; === Register Setup ===
+    clrf    ZEROS_REG
+    setf    ONES_REG
+    clrf    UTIL_FLAGS
     
     ; configure I/O ports ; refer to pinout spreadsheet/docs for how these are mapped
+    
+    ; enable digitial input buffers
+    BANKSEL ANSELA
+    clrf    ANSELA
+    clrf    ANSELB
+    clrf    ANSELC
+    clrf    ANSELD
+    clrf    ANSELE
+    
+    nop
+    nop
+    nop
+    nop
+    nop
+    
     ; 0 is output, 1 is input
-    movlw   B'00000100'
+    movlw   B'00111111'
     movwf   TRISA
     
-    movlw   B'11110111' ; interrupts, leave all inputs, except pin B3
+    movlw   B'00111100'
     movwf   TRISB
     
-    movlw   B'11110111'
+    movlw   B'00101111'
     movwf   TRISC
     
-    movlw   B'11111101'
+    movlw   B'00000011'
     movwf   TRISD
     
     movlw   B'00000111'
     movwf   TRISE
     
-    movlw   B'00000000'
-    movwf   N64_STATE_REG1
-    movlw   B'00000000'
-    movwf   N64_STATE_REG2
-    movlw   B'00000000'
-    movwf   N64_STATE_REG3
-    movlw   B'00000000'
-    movwf   N64_STATE_REG4
+    BANKSEL N64_STATE_REG1
+    clrf    N64_STATE_REG1
+    clrf    N64_STATE_REG2
+    clrf    N64_STATE_REG3
+    clrf    N64_STATE_REG4
     
     bsf     PIN_ASTICK_XA
     
@@ -218,21 +203,34 @@ Setup:
     movlw   B'00000000'
     movwf   H'21'
     
-#ifdef USING_EUSART
-    ;movlw   D'77' ; sets baud rate to approx 9,615
-    movlw   D'2' ; sets baud rate to 250,000
-    movwf   SPBRG 
+    ; === Enable UART ===
+    BANKSEL U2CON0
+    bsf     U2CON0, U2TXEN  ; enable TX
+                            ; MODE is 0000 by default, which sets UART to Async 8-bit
+    bcf     U2CON0, U2BRGS  ; normal baud rate formula
+    clrf    U2BRGH
+    movlw   D'15'
+    movwf   U2BRGL          ; set baud rate to 250,000
+    bsf     U2CON1, U2ON    ; enable UART2
     
-    bcf     TXSTA, SYNC
-    bsf     RCSTA, SPEN
-    bsf     TXSTA, TXEN
+    ; === Enable CRC ===
+    BANKSEL CRCCON0
+    bsf     CRCCON0, CRCEN  ; enable CRC module
+    clrf    CRCACCH
+    clrf    CRCACCL ; seed 0x00
+    clrf    CRCXORH
+    movlw   0x85
+    movwf   CRCXORL ; set polynomial/mask to 0x85
+    clrf    CRCDATH ; not strictly necessary, clear upper 8bits of CRC data
+    movlw   B'01110111'
+    movwf   CRCCON1 ; set bit length to 8
+    bsf     CRCCON0, ACCM   ; enable concat data with zeros when shifting
+    ;bsf     CRCCON0, SHIFTM ; shift order
     
-    bcf     RCSTA, CREN
     
-    bsf     TRISC, 7
-    bsf     TRISC, 6
-#endif
+    movlb   B'00000000'
     
+    ; === Begin Main Loop ===
 Start:
     call    ListenForN64
     goto    Start
@@ -245,7 +243,6 @@ ListenForN64:
     
     ;btfsc   PIN_START
     ;call    PakDump
-    
 ListenForN64Loop:
     btfsc   PIN_DATAIN
     goto    ListenForN64Loop        ; wait until datapin goes LOW
@@ -253,20 +250,25 @@ ListenForN64Loop:
     call    DetermineDataToByte2
     movff   N64_DATA_DETER, N64_CMD_REG
     
-    lfsr    2, N64_DATA_TMP0
+    lfsr    1, N64_DATA_TMP0
 LFNL_DecodeLoop:
+    bsf PORTB,1
+    bcf PORTB,1
     btfsc   PIN_DATAIN
     goto    LFNL_DecodeLoop         ; wait until datapin goes LOW, if not already
     
-    call    DetermineDataToByte2    ; will have 7 cycles left over
-    movff   N64_DATA_DETER, POSTINC2
+    call    DetermineDataToByte2    ; will have 11 cycles left over
+    movffl  N64_DATA_DETER, POSTINC1
+    wait    D'4'
     btfss   UTIL_FLAGS, 7
     goto    LFNL_DecodeLoop         ; if not skipped, 7 cycles will have been consumed after jumping
     
     bcf     UTIL_FLAGS, 7
     
-    lfsr    2, N64_DATA_TMP0        ; reset FSR for command usage as needed
+    lfsr    1, N64_DATA_TMP0        ; reset FSR for command usage as needed
     
+    bsf PORTB,1
+    bcf PORTB,1
     ; N64_CMD_REG is now set with command from N64 console
     ; Below is where N64_CMD_REG will be checked against each Protocol command
     ; (in order of most to least common command)
@@ -274,9 +276,7 @@ LFNL_DecodeLoop:
     bcf     TRIS_DATAIO ; set to output
     bsf     PIN_DATAOUT
     
-#ifdef USING_EUSART
-    movff   N64_CMD_REG, TXREG
-#endif
+    movffl  N64_CMD_REG, U2TXB
     
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_STATE
@@ -288,10 +288,10 @@ LFNL_DecodeLoop:
     btfsc   STATUS, Z
     goto N64Loop00
     
-    movf    N64_CMD_REG, 0
-    xorlw   N64_CMD_READACCES
-    btfsc   STATUS, Z
-    goto N64Loop02
+    ;movf    N64_CMD_REG, 0
+    ;xorlw   N64_CMD_READACCES
+    ;btfsc   STATUS, Z
+    ;goto N64Loop02
     
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_WRITEACCES
@@ -301,7 +301,7 @@ LFNL_DecodeLoop:
     ; if this point is reached, no commands were identified. Wait a short time in case of any additional data
     movlw   D'224'
     movwf   PAUSE_REG_0
-    movlw   D'3'
+    movlw   D'4'
     movwf   PAUSE_REG_1
     call    Pause2D
     return
@@ -313,27 +313,27 @@ N64LoopFF:  ; Do 0xFF (reset/info) command here
     ; continue to N64Loop00...
     
 N64Loop00:  ; Do 0x00 (info) command here
+    BANKSEL ZEROS_REG
+    
     TransmitByte 0x05, PIN_DATAOUT, 1
     TransmitByte 0x00, PIN_DATAOUT, 1
     TransmitByte 0x01, PIN_DATAOUT, 1
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
-#ifdef USING_EUSART
     movlw   D'170'
     movwf   PAUSE_REG_0
     movlw   D'1'
     movwf   PAUSE_REG_1
     
     movlw   0x05
-    movwf   TXREG
+    movffl  WREG, U2TXB
     call    Pause2D
     movlw   0x00
-    movwf   TXREG
+    movffl  WREG, U2TXB
     call    Pause2D
     movlw   0x01
-    movwf   TXREG
-#endif
+    movffl  WREG, U2TXB
     
     goto ContinueLFNL
     
@@ -358,14 +358,12 @@ N64Loop01:  ; Do 0x01 (state) command here
     bsf     N64_STATE_REG2, 7 ; then set RST bit
     movff   ZEROS_REG, N64_STATE_REG3 ; and reset x-axis
     movff   ZEROS_REG, N64_STATE_REG4 ; and reset y-axis
+    bcf     N64_STATE_REG1, 4 ; clear START from response
 ContAfterRstCheck:
     CopyRegBitToRegBit  PIN_LT,     N64_STATE_REG2, 5
     CopyRegBitToRegBit  PIN_RT,     N64_STATE_REG2, 4
-#ifdef USING_EUSART
-#else
     CopyRegBitToRegBit  PIN_cU,     N64_STATE_REG2, 3
     CopyRegBitToRegBit  PIN_cD,     N64_STATE_REG2, 2
-#endif
     CopyRegBitToRegBit  PIN_cL,     N64_STATE_REG2, 1
     CopyRegBitToRegBit  PIN_cR,     N64_STATE_REG2, 0
     
@@ -379,20 +377,18 @@ ContAfterRstCheck:
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
-#ifdef USING_EUSART
     movlw   D'170'
     movwf   PAUSE_REG_0
     movlw   D'1'
     movwf   PAUSE_REG_1
     
-    movff   N64_STATE_REG1, TXREG
+    movffl  N64_STATE_REG1, U2TXB
     call    Pause2D
-    movff   N64_STATE_REG2, TXREG
+    movffl  N64_STATE_REG2, U2TXB
     call    Pause2D
-    movff   N64_STATE_REG3, TXREG
+    movffl  N64_STATE_REG3, U2TXB
     call    Pause2D
-    movff   N64_STATE_REG4, TXREG
-#endif
+    movffl  N64_STATE_REG4, U2TXB
     
     goto ContinueLFNL
     
@@ -471,32 +467,26 @@ FileEND:
     goto ContinueLFNL
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
-    ;movlw   D'213'
-    ;movwf   PAUSE_REG_0
-    ;movlw   D'1'
-    ;movwf   PAUSE_REG_1
-    ;call    Pause2D
-    ;nop
-    ;nop
-    ;nop
+    BANKSEL ZEROS_REG
     
-    call    CRC32Bytes
-    ;movlw   0xE1
-    movwf   TX_DATA
+    call    CRCHardware
+    
+    movffl  WREG, TX_DATA
     call    TransmitByteRoutine
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
-    movwf   TXREG
     
-;    lfsr    2, N64_DATA_TMP0
-;    movlw   D'32'
+    movffl  WREG, U2TXB
+    
+;    lfsr    1, N64_DATA_TMP0
+;    movlw   D'34'
 ;    movwf   LOOP_COUNT_0
 ;    movlw   D'170'
 ;    movwf   PAUSE_REG_0
 ;    movlw   D'1'
 ;    movwf   PAUSE_REG_1
 ;N64Loop03_DebugLoop:
-;    movff   POSTINC2, TXREG
+;    movffl  POSTINC1, U2TXB
 ;    call    Pause2D
 ;    decfsz  LOOP_COUNT_0
 ;    goto    N64Loop03_DebugLoop
@@ -509,32 +499,14 @@ ContinueLFNL:
     
 ; INTERRUPT SUBROUTINES ;
 
-HandleN64CommandInterrupt:
-    ; currently unused
-    bcf     INTCON3, INT0IF ; clear interrupt flag
-    retfie 1
+HandleIOCInterrupt:
+    BANKSEL IOCBF
+    btfsc   IOCBF, 5
+    goto    HandleXAInterrupt
     
-HandleYAInterrupt:
-    ; PIN_ASTICK_YA, PIN_ASTICK_YB
-    btfsc   PIN_ASTICK_YA
-    goto    YA_IS_ONE
-YA_IS_ZERO:
-    btfsc   PIN_ASTICK_YB
-    goto    YA_NOTEQUALS_YB
-    goto    YA_EQUALS_YB
-YA_IS_ONE:
-    btfsc   PIN_ASTICK_YB
-    goto    YA_EQUALS_YB
-YA_NOTEQUALS_YB:
-    decf    N64_STATE_REG4, 1, 1
-    decf    N64_STATE_REG4, 1, 1
-    goto    HYAI_Finish
-YA_EQUALS_YB:
-    incf    N64_STATE_REG4, 1, 1
-    incf    N64_STATE_REG4, 1, 1
-HYAI_Finish:
-    bcf     INTCON3, INT2IF ; clear interrupt flag
-    bcf     INTCON3, INT1IF ; clear interrupt flag
+    btfsc   IOCBF, 2
+    goto    HandleYAInterrupt
+    
     retfie 1
     
 HandleXAInterrupt:
@@ -556,8 +528,29 @@ XA_EQUALS_XB:
     incf    N64_STATE_REG3, 1, 1
     incf    N64_STATE_REG3, 1, 1
 HXAI_Finish:
-    movf    PORTB, 1
-    bcf     INTCON, RBIF ; clear interrupt flag
+    bcf     IOCBF, 5 ; clear interrupt flag
+    retfie 1
+    
+HandleYAInterrupt:
+    ; PIN_ASTICK_YA, PIN_ASTICK_YB
+    btfsc   PIN_ASTICK_YA
+    goto    YA_IS_ONE
+YA_IS_ZERO:
+    btfsc   PIN_ASTICK_YB
+    goto    YA_NOTEQUALS_YB
+    goto    YA_EQUALS_YB
+YA_IS_ONE:
+    btfsc   PIN_ASTICK_YB
+    goto    YA_EQUALS_YB
+YA_NOTEQUALS_YB:
+    decf    N64_STATE_REG4, 1, 1
+    decf    N64_STATE_REG4, 1, 1
+    goto    HYAI_Finish
+YA_EQUALS_YB:
+    incf    N64_STATE_REG4, 1, 1
+    incf    N64_STATE_REG4, 1, 1
+HYAI_Finish:
+    bcf     IOCBF, 2 ; clear interrupt flag
     retfie 1
     
     end

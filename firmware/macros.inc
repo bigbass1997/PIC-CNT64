@@ -35,30 +35,30 @@ CopyRegBitToInvertRegBit  macro fromPort, fromBit, toPort, toBit
     
 ; LOW, LOW, LOW, HIGH
 TransmitZeroBit	macro port, bit, cutOvertime
-    local overtime = D'11' - cutOvertime
+    local overtime = D'15' - cutOvertime
     
     bcf	    port, bit
-    wait D'35'
+    wait D'47'
     bsf	    port, bit
     wait overtime
     endm
     
 ; LOW, HIGH, HIGH, HIGH
 TransmitOneBit	macro port, bit, cutOvertime
-    local overtime = D'35' - cutOvertime
+    local overtime = D'47' - cutOvertime
     
     bcf	    port, bit
-    wait D'11'
+    wait D'15'
     bsf	    port, bit
     wait overtime
     endm
     
 ; LOW, LOW, HIGH, HIGH
 TransmitContStopBit macro port, bit, cutOvertime
-    local overtime = D'23' - cutOvertime
+    local overtime = D'31' - cutOvertime
     
     bcf	    port, bit
-    wait D'23'
+    wait D'31'
     bsf	    port, bit
     wait overtime
     endm
@@ -102,14 +102,9 @@ i -= 1
     
     endm
     
-SetIfDataLow    macro bitIndex
-    btfss   PIN_DATAIN
-    bcf     N64_BIT_REG, bitIndex
-    endm
-    
 ; shifts one byte from reg, into SIPO shift register
 ShiftAddrByte macro reg
-    movff   reg, WREG
+    movffl  reg, WREG
     
     LOCAL   i = 0
     WHILE   i < 9
@@ -126,7 +121,7 @@ i += 1
     
 ; shifts two bytes from reg1 and reg2, into SIPO shift register
 ShiftAddrDualByte macro reg1, reg2
-    movff   reg1, WREG
+    movffl  reg1, WREG
     
     LOCAL   i = 0
     WHILE   i < 8
@@ -148,7 +143,7 @@ i += 1
     
 ; shift data from reg out to IO pins
 ShiftIoOutByte	macro reg
-    movff   reg, WREG
+    movffl  reg, WREG
     bcf     PIN_IO_OE1
     bcf	    PIN_IO_S1
     
