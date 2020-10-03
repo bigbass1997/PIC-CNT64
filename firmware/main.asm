@@ -160,12 +160,6 @@ Setup:
     clrf    ANSELD
     clrf    ANSELE
     
-    nop
-    nop
-    nop
-    nop
-    nop
-    
     ; 0 is output, 1 is input
     movlw   B'00111111'
     movwf   TRISA
@@ -377,7 +371,7 @@ ContAfterRstCheck:
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
-    movlw   D'170'
+    movlw   D'220'
     movwf   PAUSE_REG_0
     movlw   D'1'
     movwf   PAUSE_REG_1

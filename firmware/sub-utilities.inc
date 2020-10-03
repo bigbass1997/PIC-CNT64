@@ -25,7 +25,7 @@ TransmitByteRoutine:
     
     
 PakDump:
-    movlw   D'103'
+    movlw   D'220'
     movwf   PAUSE_REG_0
     movlw   D'1'
     movwf   PAUSE_REG_1
