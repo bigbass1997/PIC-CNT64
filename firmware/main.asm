@@ -6,7 +6,7 @@
     CONFIG DEBUG = ON
     CONFIG LVP = ON
     CONFIG MCLRE = EXTMCLR
-    CONFIG MVECEN = ON
+    CONFIG MVECEN = OFF
     
     CONFIG RSTOSC = HFINTOSC_64MHZ
     
@@ -15,8 +15,7 @@
 ResVec      code	0x0000
     goto    Setup
     
-;   Interrupt Table is in use. Base is set to default 0x0008
-IOCInt      code    0x0016
+IntVec      code    0x0008
     goto    HandleIOCInterrupt
     
     
@@ -131,19 +130,6 @@ Setup:
     movlw   B'00010110'
     movwf   RB0PPS      ; Set U2TX to pin RB0
     
-    ; === Interrupts ===
-    ;BANKSEL PIE0
-    ;bsf     PIE0, IOCIE     ; enable Interrupt-On-Change feature
-    
-    ;BANKSEL IOCBP
-    ;bsf     IOCBP, 5        ; enable IOC rising-edge on RB5
-    ;bsf     IOCBN, 5        ; enable IOC falling-edge on RB5
-    ;bsf     IOCBP, 2        ; enable IOC rising-edge on RB2
-    ;bsf     IOCBN, 2        ; enable IOC falling-edge on RB2
-    
-    ;BANKSEL INTCON0
-    ;bsf     INTCON0, GIE    ; enable interrupt feature
-    
     movlb   B'00000000'
     ; === Register Setup ===
     clrf    ZEROS_REG
@@ -222,6 +208,20 @@ Setup:
     ;bsf     CRCCON0, SHIFTM ; shift order
     
     
+    ; === Interrupts ===
+    BANKSEL PIE0
+    bsf     PIE0, IOCIE     ; enable Interrupt-On-Change feature
+    
+    BANKSEL IOCBP
+    bsf     IOCBP, 5        ; enable IOC rising-edge on RB5
+    bsf     IOCBN, 5        ; enable IOC falling-edge on RB5
+    bsf     IOCBP, 2        ; enable IOC rising-edge on RB2
+    bsf     IOCBN, 2        ; enable IOC falling-edge on RB2
+    
+    BANKSEL INTCON0
+    bsf     INTCON0, GIE    ; enable interrupt feature
+    
+    
     movlb   B'00000000'
     
     ; === Begin Main Loop ===
@@ -246,8 +246,6 @@ ListenForN64Loop:
     
     lfsr    1, N64_DATA_TMP0
 LFNL_DecodeLoop:
-    bsf PORTB,1
-    bcf PORTB,1
     btfsc   PIN_DATAIN
     goto    LFNL_DecodeLoop         ; wait until datapin goes LOW, if not already
     
@@ -261,8 +259,6 @@ LFNL_DecodeLoop:
     
     lfsr    1, N64_DATA_TMP0        ; reset FSR for command usage as needed
     
-    bsf PORTB,1
-    bcf PORTB,1
     ; N64_CMD_REG is now set with command from N64 console
     ; Below is where N64_CMD_REG will be checked against each Protocol command
     ; (in order of most to least common command)
@@ -301,8 +297,9 @@ LFNL_DecodeLoop:
     return
     
 N64LoopFF:  ; Do 0xFF (reset/info) command here
-    movff   ZEROS_REG, N64_STATE_REG3 ; resets x-axis
-    movff   ZEROS_REG, N64_STATE_REG4 ; resets y-axis
+    BANKSEL ZEROS_REG
+    clrf    N64_STATE_REG3 ; resets x-axis
+    clrf    N64_STATE_REG4 ; resets y-axis
     
     ; continue to N64Loop00...
     
@@ -315,7 +312,7 @@ N64Loop00:  ; Do 0x00 (info) command here
     wait D'5'
     TransmitContStopBit PIN_DATAOUT, 0
     
-    movlw   D'170'
+    movlw   D'220'
     movwf   PAUSE_REG_0
     movlw   D'1'
     movwf   PAUSE_REG_1
@@ -332,6 +329,7 @@ N64Loop00:  ; Do 0x00 (info) command here
     goto ContinueLFNL
     
 N64Loop01:  ; Do 0x01 (state) command here
+    BANKSEL ZEROS_REG
     ; Update input button states to state registers
     CopyRegBitToRegBit  PIN_A,      N64_STATE_REG1, 7
     CopyRegBitToRegBit  PIN_B,      N64_STATE_REG1, 6
@@ -350,8 +348,8 @@ N64Loop01:  ; Do 0x01 (state) command here
     btfss   PIN_START   ; and START is pressed
     goto    ContAfterRstCheck
     bsf     N64_STATE_REG2, 7 ; then set RST bit
-    movff   ZEROS_REG, N64_STATE_REG3 ; and reset x-axis
-    movff   ZEROS_REG, N64_STATE_REG4 ; and reset y-axis
+    clrf    N64_STATE_REG3 ; and reset x-axis
+    clrf    N64_STATE_REG4 ; and reset y-axis
     bcf     N64_STATE_REG1, 4 ; clear START from response
 ContAfterRstCheck:
     CopyRegBitToRegBit  PIN_LT,     N64_STATE_REG2, 5
@@ -475,7 +473,7 @@ N64Loop03: ; Do 0x03 (write accessory port) command here
 ;    lfsr    1, N64_DATA_TMP0
 ;    movlw   D'34'
 ;    movwf   LOOP_COUNT_0
-;    movlw   D'170'
+;    movlw   D'220'
 ;    movwf   PAUSE_REG_0
 ;    movlw   D'1'
 ;    movwf   PAUSE_REG_1
@@ -504,6 +502,7 @@ HandleIOCInterrupt:
     retfie 1
     
 HandleXAInterrupt:
+    BANKSEL ZEROS_REG
     ; PIN_ASTICK_XA, PIN_ASTICK_XB
     btfsc   PIN_ASTICK_XA
     goto    XA_IS_ONE
@@ -522,10 +521,12 @@ XA_EQUALS_XB:
     incf    N64_STATE_REG3, 1, 1
     incf    N64_STATE_REG3, 1, 1
 HXAI_Finish:
+    BANKSEL IOCBF
     bcf     IOCBF, 5 ; clear interrupt flag
     retfie 1
     
 HandleYAInterrupt:
+    BANKSEL ZEROS_REG
     ; PIN_ASTICK_YA, PIN_ASTICK_YB
     btfsc   PIN_ASTICK_YA
     goto    YA_IS_ONE
@@ -544,6 +545,7 @@ YA_EQUALS_YB:
     incf    N64_STATE_REG4, 1, 1
     incf    N64_STATE_REG4, 1, 1
 HYAI_Finish:
+    BANKSEL IOCBF
     bcf     IOCBF, 2 ; clear interrupt flag
     retfie 1
     
