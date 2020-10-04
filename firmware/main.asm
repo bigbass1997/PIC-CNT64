@@ -278,15 +278,15 @@ LFNL_DecodeLoop:
     btfsc   STATUS, Z
     goto N64Loop00
     
-    ;movf    N64_CMD_REG, 0
-    ;xorlw   N64_CMD_READACCES
-    ;btfsc   STATUS, Z
-    ;goto N64Loop02
-    
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_WRITEACCES
     btfsc   STATUS, Z
     goto N64Loop03
+    
+    movf    N64_CMD_REG, 0
+    xorlw   N64_CMD_READACCES
+    btfsc   STATUS, Z
+    goto N64Loop02
     
     ; if this point is reached, no commands were identified. Wait a short time in case of any additional data
     movlw   D'224'
@@ -385,6 +385,7 @@ ContAfterRstCheck:
     goto ContinueLFNL
     
 N64Loop02: ; Do 0x02 (read accessory port) command here
+    BANKSEL ZEROS_REG
     ; CRC is currently ignored, TODO: verify CRC is valid
     bcf     N64_DATA_TMP1, 4
     bcf     N64_DATA_TMP1, 3
