@@ -120,9 +120,7 @@ N64_BIT_CONTSTP equ B'11110011'
 Setup:
     movlb   B'00000000' ; sets current GPR bank to bank 0
     
-    clrf    FSR2H
-    movlw   B'00000000'
-    movwf   FSR2L ; sets access bank start location to 0x00
+    lfsr    2, 0x00 ; sets access bank start location to 0x00
     
     
     ; === Peripheral Pin Select ===
@@ -306,11 +304,19 @@ N64LoopFF:  ; Do 0xFF (reset/info) command here
 N64Loop00:  ; Do 0x00 (info) command here
     BANKSEL ZEROS_REG
     
-    TransmitByte 0x05, PIN_DATAOUT, 1
-    TransmitByte 0x00, PIN_DATAOUT, 1
-    TransmitByte 0x01, PIN_DATAOUT, 1
-    wait D'5'
-    TransmitContStopBit PIN_DATAOUT, 0
+    movlw   0x05
+    movwf   TX_DATA
+    nop
+    call    SendN64Byte
+    movlw   0x00
+    movwf   TX_DATA
+    nop
+    call    SendN64Byte
+    movlw   0x01
+    movwf   TX_DATA
+    nop
+    call    SendN64Byte
+    call    SendN64StopBit
     
     movlw   D'220'
     movwf   PAUSE_REG_0
@@ -362,12 +368,19 @@ ContAfterRstCheck:
     ; 60-68 "instruction" cycles will have passed by now
     
     ; Transmit bytes to console
-    TransmitByte N64_STATE_REG1, PIN_DATAOUT, 0
-    TransmitByte N64_STATE_REG2, PIN_DATAOUT, 0
-    TransmitByte N64_STATE_REG3, PIN_DATAOUT, 0
-    TransmitByte N64_STATE_REG4, PIN_DATAOUT, 0
-    wait D'5'
-    TransmitContStopBit PIN_DATAOUT, 0
+    movff   N64_STATE_REG1, TX_DATA
+    nop
+    call    SendN64Byte
+    movff   N64_STATE_REG2, TX_DATA
+    nop
+    call    SendN64Byte
+    movff   N64_STATE_REG3, TX_DATA
+    nop
+    call    SendN64Byte
+    movff   N64_STATE_REG4, TX_DATA
+    nop
+    call    SendN64Byte
+    call    SendN64StopBit
     
     movlw   D'220'
     movwf   PAUSE_REG_0
@@ -405,9 +418,12 @@ i = 0
     movlw   B'11111110' ; 0xFE
     while i < 32
     movwf   TX_DATA
-    call    TransmitByteRoutine
+    nop
+    nop
+    call    SendN64Byte
 i += 1
     endw
+    call    SendN64StopBit
     
     goto    FileEND
 File0020:
@@ -452,11 +468,9 @@ File0020:
     TXByTmp 0x03
     TXByTmp 0xA9
     ;
+    call    SendN64StopBit
     
 FileEND:
-    wait D'5'
-    TransmitContStopBit PIN_DATAOUT, 0
-    
     goto ContinueLFNL
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
@@ -465,9 +479,8 @@ N64Loop03: ; Do 0x03 (write accessory port) command here
     call    CRCHardware
     
     movffl  WREG, TX_DATA
-    call    TransmitByteRoutine
-    wait D'5'
-    TransmitContStopBit PIN_DATAOUT, 0
+    call    SendN64Byte
+    call    SendN64StopBit
     
     movffl  WREG, U2TXB
     

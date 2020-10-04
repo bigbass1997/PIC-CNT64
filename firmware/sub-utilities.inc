@@ -17,10 +17,44 @@ Pause2D_FirstLoop:
     
     return
     
+; Utilizes TX_DATA register and PIN_DATAOUT
+; 'BANKSEL TX_DATA' must be run BEFORE this subroutine!
+; Provides 3 cycles of lead time (after considering the return and next call instructions)
+SendN64Byte:
+    lfsr    2, 0x00
+    movlw   D'7'
+    movwf   LOOP_COUNT_0
     
-TransmitByteRoutine:
-    ; Utilizes TX_DATA register and PIN_DATAOUT to transmit a byte via the Joybus Protocol to the console
-    TransmitByte TX_DATA, PIN_DATAOUT, 0
+SNB_Loop:
+    rlcf    [TX_DATA], 1
+    btfsc   STATUS, C, ACCESS
+    goto    SNB_One
+    TransmitZeroBit PIN_DATAOUT, 9
+    goto    SNB_After
+SNB_One:
+    TransmitOneBit PIN_DATAOUT, 7
+SNB_After:
+    decfsz  [LOOP_COUNT_0], 1
+    goto    SNB_Loop
+    
+    ; last iteration has different timing to allow for another byte after
+    rlcf    [TX_DATA], 1
+    btfsc   STATUS, C, ACCESS
+    goto    SNB_LastOne
+    TransmitZeroBit PIN_DATAOUT, 15
+    goto    SNB_End
+SNB_LastOne:
+    TransmitOneBit PIN_DATAOUT, 13
+SNB_End:
+    return
+    
+    
+; Intended to be called immediately after the last `SendN64Byte` call
+SendN64StopBit:
+    wait D'9'
+    bcf	    PIN_DATAOUT
+    wait D'31'
+    bsf	    PIN_DATAOUT
     return
     
     

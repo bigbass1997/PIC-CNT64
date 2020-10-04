@@ -63,44 +63,6 @@ TransmitContStopBit macro port, bit, cutOvertime
     wait overtime
     endm
     
-; must give exactly 4 cycles lead time
-; byteReg is either a byte literal or a register address
-;
-; if setW == 1, then byteReg should be a literal
-;   otherwise, byteReg should be a register address
-TransmitByte	macro byteReg, port, bit, setW
-    local i = 7
-    
-    if setW == 1
-    movlw   byteReg		; 1 cycle
-    else
-    movf    byteReg, 0		; 1 cycle
-    endif
-    
-    while i >= 0
-    local Bit#v(i)_0, Bit#v(i)_Cont
-    btfss   WREG, #v(i)		; 1 cycle
-    goto Bit#v(i)_0			; 1 or 2 cycles
-    ; 3 cycles total here
-    wait D'1'
-    if i == 0
-    TransmitOneBit port, bit, D'7'
-    else
-    TransmitOneBit port, bit, D'5'
-    endif
-    goto Bit#v(i)_Cont
-Bit#v(i)_0:
-    ; 4 cycles total here
-    if i == 0
-    TransmitZeroBit port, bit, D'5'
-    else
-    TransmitZeroBit port, bit, D'3'
-    endif
-Bit#v(i)_Cont:
-i -= 1
-    endw
-    
-    endm
     
 ; shifts one byte from reg, into SIPO shift register
 ShiftAddrByte macro reg
@@ -205,6 +167,7 @@ i += 1
 TXByTmp	    macro lit
     movlw   lit
     movwf   TX_DATA
-    call TransmitByteRoutine
+    nop
+    call    SendN64Byte
     
     endm
