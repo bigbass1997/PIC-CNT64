@@ -176,6 +176,8 @@ Setup:
     ShiftAddrDualByte ZEROS_REG, ZEROS_REG
     ShiftIoOutByte ZEROS_REG
     
+    ;ShiftAddrDualByte ONES_REG, ONES_REG
+    
     movlw   B'00000000'
     movwf   H'20'
     movlw   B'00000000'
@@ -405,72 +407,39 @@ N64Loop02: ; Do 0x02 (read accessory port) command here
     bcf     N64_DATA_TMP1, 2
     bcf     N64_DATA_TMP1, 1
     bcf     N64_DATA_TMP1, 0
+    
+    BANKSEL CRCCON0
+    bsf	    CRCCON0, CRCGO
+    BANKSEL ZEROS_REG
+    
+    movlw   D'32'
+    movwf   LOOP_COUNT_1
+N64Loop02_DataLoop:
+    bsf PORTB,1
+    bcf PORTB,1
     ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
-    
-    movf    N64_DATA_TMP0, 0
-    xorlw   B'10000000'
-    btfsc   STATUS, Z
-    goto    File8000
-    goto    File0020
-    
-File8000:
-i = 0
-    movlw   B'11111110' ; 0xFE
-    while i < 32
-    movwf   TX_DATA
-    nop
-    nop
+    bsf PORTB,1
+    bcf PORTB,1
+    ShiftIoInByte TX_DATA
+    bsf PORTB,1
+    bcf PORTB,1
+    movffl  TX_DATA, CRCDATL
     call    SendN64Byte
-i += 1
-    endw
+    
+    infsnz  N64_DATA_TMP1
+    incf    N64_DATA_TMP0
+    decfsz  LOOP_COUNT_1
+    goto    N64Loop02_DataLoop
+    
+    movffl  CRCACCL, TX_DATA
+    call    SendN64Byte
     call    SendN64StopBit
     
-    goto    FileEND
-File0020:
-    TXByTmp 0x00
-    TXByTmp 0x2D
-    TXByTmp 0x00
-    TXByTmp 0x00
+    BANKSEL CRCCON0
+    bcf	    CRCCON0, CRCGO
+    clrf    CRCACCL
+    BANKSEL ZEROS_REG
     
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x3B
-    TXByTmp 0x74
-    ;
-    TXByTmp 0x00
-    TXByTmp 0x40
-    TXByTmp 0xBF
-    TXByTmp 0x67
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    ;
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    TXByTmp 0x00
-    ;
-    TXByTmp 0x00
-    TXByTmp 0x01
-    
-    TXByTmp 0x01
-    
-    TXByTmp 0x00
-    
-    TXByTmp 0xFC
-    TXByTmp 0x49
-    
-    TXByTmp 0x03
-    TXByTmp 0xA9
-    ;
-    call    SendN64StopBit
-    
-FileEND:
     goto ContinueLFNL
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
@@ -478,11 +447,37 @@ N64Loop03: ; Do 0x03 (write accessory port) command here
     
     call    CRCHardware
     
+    movffl  WREG, U2TXB
     movffl  WREG, TX_DATA
     call    SendN64Byte
     call    SendN64StopBit
     
-    movffl  WREG, U2TXB
+    bsf PORTB,1
+    bcf PORTB,1
+    
+    bcf     N64_DATA_TMP1, 4
+    bcf     N64_DATA_TMP1, 3
+    bcf     N64_DATA_TMP1, 2
+    bcf     N64_DATA_TMP1, 1
+    bcf     N64_DATA_TMP1, 0
+    
+    lfsr    1, N64_DATA_TMP2
+    movlw   D'32'
+    movwf   LOOP_COUNT_0
+N64Loop03_Loop:
+    ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
+    ShiftIoOutByte POSTINC1
+    WriteToMem
+    
+    infsnz  N64_DATA_TMP1
+    incf    N64_DATA_TMP0
+    
+    decfsz  LOOP_COUNT_0
+    goto    N64Loop03_Loop
+    
+    
+    bsf PORTB,1
+    bcf PORTB,1
     
 ;    lfsr    1, N64_DATA_TMP0
 ;    movlw   D'34'
