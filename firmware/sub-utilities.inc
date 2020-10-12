@@ -169,3 +169,88 @@ CRCH_Wait:
     BANKSEL ZEROS_REG
     
     return
+    
+CRCHardwareSpeed:
+    movlb   B'111001'
+    bsf	    CRCCON0, CRCGO
+    
+;CRCH_Loop:
+    ;btfsc   CRCCON0, FULL
+    ;goto    CRCH_Loop
+    
+    movffl  H'63', CRCDATL
+    ;
+    movffl  H'64', CRCDATL
+    ;
+    movffl  H'65', CRCDATL
+    ;
+    movffl  H'66', CRCDATL
+    ;
+    movffl  H'67', CRCDATL
+    ;
+    movffl  H'68', CRCDATL
+    ;
+    movffl  H'69', CRCDATL
+    ;
+    movffl  H'6A', CRCDATL
+    ;
+    
+    movffl  H'6B', CRCDATL
+    ;
+    movffl  H'6C', CRCDATL
+    ;
+    movffl  H'6D', CRCDATL
+    ;
+    movffl  H'6E', CRCDATL
+    ;
+    movffl  H'6F', CRCDATL
+    ;
+    movffl  H'70', CRCDATL
+    ;
+    movffl  H'71', CRCDATL
+    ;
+    movffl  H'72', CRCDATL
+    ;
+    
+    movffl  H'73', CRCDATL
+    ;
+    movffl  H'74', CRCDATL
+    ;
+    movffl  H'75', CRCDATL
+    ;
+    movffl  H'76', CRCDATL
+    ;
+    movffl  H'77', CRCDATL
+    ;
+    movffl  H'78', CRCDATL
+    ;
+    movffl  H'79', CRCDATL
+    ;
+    movffl  H'7A', CRCDATL
+    ;
+    
+    movffl  H'7B', CRCDATL
+    ;
+    movffl  H'7C', CRCDATL
+    ;
+    movffl  H'7D', CRCDATL
+    ;
+    movffl  H'7E', CRCDATL
+    ;
+    movffl  H'7F', CRCDATL
+    ;
+    movffl  H'80', CRCDATL
+    ;
+    movffl  H'81', CRCDATL
+    ;
+    movffl  H'82', CRCDATL
+    nop
+    
+    movffl  CRCACCL, WREG
+    
+    bcf	    CRCCON0, CRCGO
+    clrf    CRCACCL
+    
+    movlb   B'000000'
+    
+    return

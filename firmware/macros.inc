@@ -336,3 +336,189 @@ TXByTmp	    macro lit
     call    SendN64Byte
     
     endm
+    
+; Macros for special byte read / transmission
+    
+IncAddrBytes macro ; 2 cycles
+    infsnz  N64_DATA_TMP1
+    incf    N64_DATA_TMP0
+    
+    endm
+    
+ShiftPulseAddr macro ; 6 cycles
+    rlcf    WREG
+    bcf	    PIN_ADDR_SER
+    btfsc   STATUS, C
+    bsf	    PIN_ADDR_SER
+    bsf	    PIN_ADDR_CLK
+    bcf	    PIN_ADDR_CLK
+    
+    endm
+    
+PrepareIoRead macro ; 6 cycles
+    movlw   B'00000000'
+    bcf     PIN_IO_OE1
+    bsf	    PIN_IO_S1
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    bcf	    PIN_IO_S1
+    
+    endm
+    
+ShiftPulseIo macro ; 6 cycles
+    bcf	    STATUS, C
+    btfsc   PIN_IO_SER_IN
+    bsf	    STATUS, C
+    rlcf    WREG
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    endm
+    
+SendFinalByte macro
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_7
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_32_7
+NL02_SendOne_32_7:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'43' ; 47 - 4 = 43
+NL02_SendAfter_32_7:
+    
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_6
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_32_6
+NL02_SendOne_32_6:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'43' ; 47 - 4 = 43
+NL02_SendAfter_32_6:
+    
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_5
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_32_5
+NL02_SendOne_32_5:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'43' ; 47 - 4 = 43
+NL02_SendAfter_32_5:
+    
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_4
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_32_4
+NL02_SendOne_32_4:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'43' ; 47 - 4 = 43
+NL02_SendAfter_32_4:
+    
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_3
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_32_3
+NL02_SendOne_32_3:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'43' ; 47 - 4 = 43
+NL02_SendAfter_32_3:
+    
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_2
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_32_2
+NL02_SendOne_32_2:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'43' ; 47 - 4 = 43
+NL02_SendAfter_32_2:
+    
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_1
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_32_1
+NL02_SendOne_32_1:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'43' ; 47 - 4 = 43
+NL02_SendAfter_32_1:
+    
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_32_0
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    wait    D'47'
+    bsf	    PIN_DATAOUT
+    ;wait    D'9' ; 15 - 2 - 4 - 9 = 0
+    goto    NL02_SendAfter_32_0
+NL02_SendOne_32_0:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    wait    D'34' ; 47 - 4 - 9 = 34
+NL02_SendAfter_32_0:
+    
+    endm

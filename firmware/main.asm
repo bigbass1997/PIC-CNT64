@@ -75,9 +75,11 @@ N64_STATE_REG2  equ H'09' ; Buffer:  Button states
 N64_STATE_REG3  equ H'0A' ; Buffer:  Analog Stick X-Axis ; -127 to +128
 N64_STATE_REG4  equ H'0B' ; Buffer:  Analog Stick Y-Axis ; -127 to +128
 
-TX_DATA         equ H'0C' ; Data to be transmitted to the console
+TX_DATA         equ H'0C' ; Alias for TX_DATA1
+TX_DATA1        equ H'0C' ; Data to be transmitted to the console
+TX_DATA2        equ H'0D' ; Data to be transmitted to the console, used as "double buffer"
 
-UTIL_FLAGS      equ H'0D' ; Utility Flags, initalized with 0x00
+UTIL_FLAGS      equ H'0E' ; Utility Flags, initalized with 0x00
 ; <7> If set, determined byte is invalid, decoding should halt
 ; <6:0> Unused
 
@@ -257,7 +259,7 @@ LFNL_DecodeLoop:
     
     bcf     UTIL_FLAGS, 7
     
-    lfsr    1, N64_DATA_TMP0        ; reset FSR for command usage as needed
+    ;lfsr    1, N64_DATA_TMP0        ; reset FSR for command usage as needed
     
     ; N64_CMD_REG is now set with command from N64 console
     ; Below is where N64_CMD_REG will be checked against each Protocol command
@@ -269,6 +271,11 @@ LFNL_DecodeLoop:
     movffl  N64_CMD_REG, U2TXB
     
     movf    N64_CMD_REG, 0
+    xorlw   N64_CMD_WRITEACCES
+    btfsc   STATUS, Z
+    goto N64Loop03
+    
+    movf    N64_CMD_REG, 0
     xorlw   N64_CMD_STATE
     btfsc   STATUS, Z
     goto N64Loop01
@@ -277,11 +284,6 @@ LFNL_DecodeLoop:
     xorlw   N64_CMD_INFO
     btfsc   STATUS, Z
     goto N64Loop00
-    
-    movf    N64_CMD_REG, 0
-    xorlw   N64_CMD_WRITEACCES
-    btfsc   STATUS, Z
-    goto N64Loop03
     
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_READACCES
@@ -412,28 +414,260 @@ N64Loop02: ; Do 0x02 (read accessory port) command here
     bsf	    CRCCON0, CRCGO
     BANKSEL ZEROS_REG
     
-    movlw   D'32'
-    movwf   LOOP_COUNT_1
-N64Loop02_DataLoop:
-    bsf PORTB,1
-    bcf PORTB,1
+    ; Read first byte
     ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
-    bsf PORTB,1
-    bcf PORTB,1
-    ShiftIoInByte TX_DATA
-    bsf PORTB,1
-    bcf PORTB,1
-    movffl  TX_DATA, CRCDATL
-    call    SendN64Byte
+    ShiftIoInByte TX_DATA1
+    IncAddrBytes
+    movffl  TX_DATA1, CRCDATL
     
-    infsnz  N64_DATA_TMP1
-    incf    N64_DATA_TMP0
-    decfsz  LOOP_COUNT_1
-    goto    N64Loop02_DataLoop
+    movlw   D'31'
+    movwf   LOOP_COUNT_0
+NL02_SendLoop:
+    ; *** Byte #1 Transmission | Byte #2 Read ***
+; bit <7>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_7
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    movf    N64_DATA_TMP0, W ; prepare upper 8 bits of address for shifting
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    wait    D'22' ; 47 - 25 = 22
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_1_7
+NL02_SendOne_1_7:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    movf    N64_DATA_TMP0, W ; prepare upper 8 bits of address for shifting
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    wait    D'18' ; 47 - 25 - 4 = 18
+NL02_SendAfter_1_7:
     
+; bit <6>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_6
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    rlcf    WREG
+    bcf	    PIN_ADDR_SER
+    btfsc   STATUS, C
+    bsf	    PIN_ADDR_SER
+    wait    D'19' ; 47 - 24 - 4 = 19
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_1_6
+NL02_SendOne_1_6:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    rlcf    WREG
+    bcf	    PIN_ADDR_SER
+    btfsc   STATUS, C
+    bsf	    PIN_ADDR_SER
+    wait    D'15' ; 47 - 24 - 4 - 4 = 15
+NL02_SendAfter_1_6:
+    
+; bit <5>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_5
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    movf    N64_DATA_TMP1, W ; prepare lower 8 bits of address for shifting
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    wait    D'22' ; 47 - 25 = 22
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_1_5
+NL02_SendOne_1_5:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    movf    N64_DATA_TMP1, W ; prepare lower 8 bits of address for shifting
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    wait    D'18' ; 47 - 25 - 4 = 18
+NL02_SendAfter_1_5:
+    
+; bit <4>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_4
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    wait    D'17' ; 47 - 30 = 17
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_1_4
+NL02_SendOne_1_4:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    ShiftPulseAddr
+    wait    D'13' ; 47 - 30 - 4 = 13
+NL02_SendAfter_1_4:
+    
+; bit <3>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_3
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    PrepareIoRead
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    wait    D'17' ; 47 - 30 = 17
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_1_3
+NL02_SendOne_1_3:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    PrepareIoRead
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    wait    D'13' ; 47 - 30 - 4 = 13
+NL02_SendAfter_1_3:
+    
+; bit <2>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_2
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    wait    D'23' ; 47 - 24 = 23
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_1_2
+NL02_SendOne_1_2:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    wait    D'19' ; 47 - 24 - 4 = 19
+NL02_SendAfter_1_2:
+    
+; bit <1>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_1
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    bsf     PIN_IO_OE1
+    movwf   TX_DATA2
+    movlb   B'111001' ; bank 57
+    movwf   CRCDATL
+    movlb   B'000000' ; bank 0
+    IncAddrBytes
+    wait    D'40' ; 47 - 7 = 40
+    bsf	    PIN_DATAOUT
+    wait    D'9' ; 15 - 2 - 4 = 9
+    goto    NL02_SendAfter_1_1
+NL02_SendOne_1_1:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    bsf     PIN_IO_OE1
+    movwf   TX_DATA2
+    movlb   B'111001' ; bank 57
+    movwf   CRCDATL
+    movlb   B'000000' ; bank 0
+    IncAddrBytes
+    wait    D'36' ; 47 - 7 - 4 = 36
+NL02_SendAfter_1_1:
+    
+; bit <0>
+    rlcf    TX_DATA1, 1
+    btfsc   STATUS, C, ACCESS
+    goto    NL02_SendOne_1_0
+    nop
+    ; Send zero bit
+    bcf	    PIN_DATAOUT
+    movff   TX_DATA2, TX_DATA1
+    wait    D'45' ; 47 - 2 = 45
+    bsf	    PIN_DATAOUT
+    wait    D'6' ; 15 - 2 - 3 - 4 = 9
+    goto    NL02_SendAfter_1_0
+NL02_SendOne_1_0:
+    ; Send one bit
+    bcf	    PIN_DATAOUT
+    wait    D'15'
+    bsf	    PIN_DATAOUT
+    movff   TX_DATA2, TX_DATA1
+    wait    D'38' ; 47 - 2 - 3 - 4 = 38
+NL02_SendAfter_1_0:
+    
+    decfsz  LOOP_COUNT_0
+    goto    NL02_SendLoop
+    nop
+    
+    SendFinalByte
+    ;wait    D'108'
+    
+    ; Send and reset CRC
     movffl  CRCACCL, TX_DATA
     call    SendN64Byte
+    wait    D'6'
     call    SendN64StopBit
+    
+    movffl  CRCACCL, U2TXB
     
     BANKSEL CRCCON0
     bcf	    CRCCON0, CRCGO
@@ -445,7 +679,8 @@ N64Loop02_DataLoop:
 N64Loop03: ; Do 0x03 (write accessory port) command here
     BANKSEL ZEROS_REG
     
-    call    CRCHardware
+    ;call    CRCHardware
+    call    CRCHardwareSpeed
     
     movffl  WREG, U2TXB
     movffl  WREG, TX_DATA
