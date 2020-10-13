@@ -1,7 +1,5 @@
-/build/
-/debug/
-/disassembly/
-/dist/
-/nbproject/
-/pcb-schematic/pic-cnt64.sch-bak
-/pcb-schematic/pic-cnt64.kicad_pcb-bak
+/firmware/build/
+/firmware/debug/
+/firmware/disassembly/
+/firmware/dist/
+/firmware/nbproject/
