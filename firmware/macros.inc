@@ -63,154 +63,24 @@ TransmitContStopBit macro port, bit, cutOvertime
     wait overtime
     endm
     
-    
-; shifts one byte from reg, into SIPO shift register
-ShiftAddrByte macro reg
-    movf    reg, W
-    
-    ;LOCAL   i = 0
-    ;WHILE   i < 9
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-;i += 1
-    ;ENDW
+; shifts two bytes from reg1 and reg2, into SIPO shift register
+ShiftAddrDualByte macro reg1, reg2
+    movffl  reg1, SPI1TXB
+    movffl  reg2, SPI1TXB
+    wait    D'32'
+    bsf	    PIN_ADDR_LAT
+    bcf	    PIN_ADDR_LAT
     
     endm
     
-; shifts two bytes from reg1 and reg2, into SIPO shift register
-ShiftAddrDualByte macro reg1, reg2
-    movf    reg1, W
-    
-    ;LOCAL   i = 0
-    ;WHILE   i < 8
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
-    
-;i += 1
-    ;ENDW
-    
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    
-    ShiftAddrByte reg2
+ShiftAddrDualByteLit macro lit1, lit2
+    movlw   lit1
+    movffl  WREG, SPI1TXB
+    movlw   lit2
+    movffl  WREG, SPI1TXB
+    wait    D'32'
+    bsf	    PIN_ADDR_LAT
+    bcf	    PIN_ADDR_LAT
     
     endm
     
@@ -220,19 +90,61 @@ ShiftIoOutByte	macro reg
     bcf     PIN_IO_OE1
     bcf	    PIN_IO_S1
     
-    LOCAL   i = 0
-    WHILE   i < 8
+    rlcf    WREG
+    bcf	    PIN_IO_SER_OUT
+    btfsc   STATUS, C
+    bsf	    PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
     
     rlcf    WREG
     bcf	    PIN_IO_SER_OUT
     btfsc   STATUS, C
     bsf	    PIN_IO_SER_OUT
-    ;CopyRegBitToRegBit STATUS, C, PIN_IO_SER_OUT
     bsf	    PIN_IO_CLK
     bcf	    PIN_IO_CLK
     
-i += 1
-    ENDW
+    rlcf    WREG
+    bcf	    PIN_IO_SER_OUT
+    btfsc   STATUS, C
+    bsf	    PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    rlcf    WREG
+    bcf	    PIN_IO_SER_OUT
+    btfsc   STATUS, C
+    bsf	    PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    rlcf    WREG
+    bcf	    PIN_IO_SER_OUT
+    btfsc   STATUS, C
+    bsf	    PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    rlcf    WREG
+    bcf	    PIN_IO_SER_OUT
+    btfsc   STATUS, C
+    bsf	    PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    rlcf    WREG
+    bcf	    PIN_IO_SER_OUT
+    btfsc   STATUS, C
+    bsf	    PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
+    
+    rlcf    WREG
+    bcf	    PIN_IO_SER_OUT
+    btfsc   STATUS, C
+    bsf	    PIN_IO_SER_OUT
+    bsf	    PIN_IO_CLK
+    bcf	    PIN_IO_CLK
     
     bcf	    PIN_IO_SER_OUT
     bsf     PIN_IO_OE1
@@ -243,6 +155,12 @@ WriteToMem macro
     bcf     PIN_IO_OE1
     
     bcf     PIN_MEM_RW
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
     nop
     nop
     bsf     PIN_MEM_RW
@@ -261,9 +179,6 @@ ShiftIoInByte	macro reg
     
     bcf	    PIN_IO_S1
     
-    ;LOCAL   i = 0
-    ;WHILE   i < 8
-    
     bcf	    STATUS, C
     btfsc   PIN_IO_SER_IN
     bsf	    STATUS, C
@@ -319,9 +234,6 @@ ShiftIoInByte	macro reg
     rlcf    WREG
     bsf	    PIN_IO_CLK
     bcf	    PIN_IO_CLK
-    
-;i += 1
-    ;ENDW
     
     bsf     PIN_IO_OE1
     movwf   reg
@@ -342,16 +254,6 @@ TXByTmp	    macro lit
 IncAddrBytes macro ; 2 cycles
     infsnz  N64_DATA_TMP1
     incf    N64_DATA_TMP0
-    
-    endm
-    
-ShiftPulseAddr macro ; 6 cycles
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    bsf	    PIN_ADDR_CLK
-    bcf	    PIN_ADDR_CLK
     
     endm
     

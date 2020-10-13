@@ -45,8 +45,7 @@ IntVec      code    0x0008
 #define     PIN_dD          PORTC, 1
 #define     PIN_dU          PORTC, 0
 
-#define     PIN_ADDR_CLK    LATD,  5
-#define     PIN_ADDR_SER    LATD,  4
+#define     PIN_ADDR_LAT    LATD,  6
 #define     PIN_IO_SER_OUT  LATD,  3
 #define     PIN_IO_CLK      LATD,  2
 #define     PIN_DATAIN      PORTD, 1
@@ -126,9 +125,13 @@ Setup:
     
     
     ; === Peripheral Pin Select ===
-    BANKSEL RB0PPS
-    movlw   B'00010110'
-    movwf   RB0PPS      ; Set U2TX to pin RB0
+    movlb   B'111010'   ; Bank 58
+    movlw   B'010110'
+    movwf   RD7PPS      ; Set U2TX to pin RD7
+    movlw   B'011110'
+    movwf   RB0PPS      ; Set SCK to pin RB0
+    movlw   B'011111'
+    movwf   RB1PPS      ; Set SDO to pin RB1
     
     movlb   B'00000000'
     ; === Register Setup ===
@@ -170,15 +173,10 @@ Setup:
     
     bsf     PIN_ASTICK_XA
     
-    bcf     PIN_ADDR_CLK
+    bcf     PIN_ADDR_LAT
     bcf     PIN_IO_CLK
     bsf     PIN_IO_OE1
     bsf     PIN_MEM_RW
-    
-    ShiftAddrDualByte ZEROS_REG, ZEROS_REG
-    ShiftIoOutByte ZEROS_REG
-    
-    ;ShiftAddrDualByte ONES_REG, ONES_REG
     
     movlw   B'00000000'
     movwf   H'20'
@@ -207,8 +205,21 @@ Setup:
     movlw   B'01110111'
     movwf   CRCCON1 ; set bit length to 8
     bsf     CRCCON0, ACCM   ; enable concat data with zeros when shifting
-    ;bsf     CRCCON0, SHIFTM ; shift order
     
+    ; === Enable SPI ===
+    movlb   B'111101'   ; Bank 61
+    clrf    SPI1TWIDTH
+    movlw   D'3'
+    movwf   SPI1BAUD
+    bsf     SPI1CON0, MST
+    bsf     SPI1CON0, BMODE
+    bcf     SPI1CON1, CKE
+    bsf     SPI1CON1, CKP
+    bcf     SPI1CON1, SDOP
+    bsf     SPI1CON2, TXR
+    movlw   B'0001'
+    movwf   SPI1CLK
+    bsf     SPI1CON0, EN
     
     ; === Interrupts ===
     BANKSEL PIE0
@@ -225,6 +236,10 @@ Setup:
     
     
     movlb   B'00000000'
+    
+    ; Initialize Shift Registers to all zeros
+    ShiftAddrDualByte ZEROS_REG, ZEROS_REG
+    ShiftIoOutByte ZEROS_REG
     
     ; === Begin Main Loop ===
 Start:
@@ -259,7 +274,7 @@ LFNL_DecodeLoop:
     
     bcf     UTIL_FLAGS, 7
     
-    ;lfsr    1, N64_DATA_TMP0        ; reset FSR for command usage as needed
+    lfsr    1, N64_DATA_TMP0        ; reset FSR for command usage as needed
     
     ; N64_CMD_REG is now set with command from N64 console
     ; Below is where N64_CMD_REG will be checked against each Protocol command
@@ -271,11 +286,6 @@ LFNL_DecodeLoop:
     movffl  N64_CMD_REG, U2TXB
     
     movf    N64_CMD_REG, 0
-    xorlw   N64_CMD_WRITEACCES
-    btfsc   STATUS, Z
-    goto N64Loop03
-    
-    movf    N64_CMD_REG, 0
     xorlw   N64_CMD_STATE
     btfsc   STATUS, Z
     goto N64Loop01
@@ -284,6 +294,11 @@ LFNL_DecodeLoop:
     xorlw   N64_CMD_INFO
     btfsc   STATUS, Z
     goto N64Loop00
+    
+    movf    N64_CMD_REG, 0
+    xorlw   N64_CMD_WRITEACCES
+    btfsc   STATUS, Z
+    goto N64Loop03
     
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_READACCES
@@ -431,12 +446,9 @@ NL02_SendLoop:
     nop
     ; Send zero bit
     bcf	    PIN_DATAOUT
-    movf    N64_DATA_TMP0, W ; prepare upper 8 bits of address for shifting
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    wait    D'22' ; 47 - 25 = 22
+    movffl  N64_DATA_TMP0, SPI1TXB
+    movffl  N64_DATA_TMP1, SPI1TXB
+    wait    D'41' ; 47 - 6 = 41
     bsf	    PIN_DATAOUT
     wait    D'9' ; 15 - 2 - 4 = 9
     goto    NL02_SendAfter_1_7
@@ -445,12 +457,9 @@ NL02_SendOne_1_7:
     bcf	    PIN_DATAOUT
     wait    D'15'
     bsf	    PIN_DATAOUT
-    movf    N64_DATA_TMP0, W ; prepare upper 8 bits of address for shifting
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    wait    D'18' ; 47 - 25 - 4 = 18
+    movffl  N64_DATA_TMP0, SPI1TXB
+    movffl  N64_DATA_TMP1, SPI1TXB
+    wait    D'37' ; 47 - 6 - 4 = 37
 NL02_SendAfter_1_7:
     
 ; bit <6>
@@ -460,15 +469,7 @@ NL02_SendAfter_1_7:
     nop
     ; Send zero bit
     bcf	    PIN_DATAOUT
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    wait    D'19' ; 47 - 24 - 4 = 19
+    wait    D'47' ; 47
     bsf	    PIN_DATAOUT
     wait    D'9' ; 15 - 2 - 4 = 9
     goto    NL02_SendAfter_1_6
@@ -477,15 +478,7 @@ NL02_SendOne_1_6:
     bcf	    PIN_DATAOUT
     wait    D'15'
     bsf	    PIN_DATAOUT
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    rlcf    WREG
-    bcf	    PIN_ADDR_SER
-    btfsc   STATUS, C
-    bsf	    PIN_ADDR_SER
-    wait    D'15' ; 47 - 24 - 4 - 4 = 15
+    wait    D'43' ; 47 - 4 = 43
 NL02_SendAfter_1_6:
     
 ; bit <5>
@@ -495,12 +488,7 @@ NL02_SendAfter_1_6:
     nop
     ; Send zero bit
     bcf	    PIN_DATAOUT
-    movf    N64_DATA_TMP1, W ; prepare lower 8 bits of address for shifting
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    wait    D'22' ; 47 - 25 = 22
+    wait    D'47' ; 47 
     bsf	    PIN_DATAOUT
     wait    D'9' ; 15 - 2 - 4 = 9
     goto    NL02_SendAfter_1_5
@@ -509,12 +497,7 @@ NL02_SendOne_1_5:
     bcf	    PIN_DATAOUT
     wait    D'15'
     bsf	    PIN_DATAOUT
-    movf    N64_DATA_TMP1, W ; prepare lower 8 bits of address for shifting
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    wait    D'18' ; 47 - 25 - 4 = 18
+    wait    D'43' ; 47 - 4 = 43
 NL02_SendAfter_1_5:
     
 ; bit <4>
@@ -524,27 +507,20 @@ NL02_SendAfter_1_5:
     nop
     ; Send zero bit
     bcf	    PIN_DATAOUT
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    wait    D'17' ; 47 - 30 = 17
+    wait    D'47' ; 47
     bsf	    PIN_DATAOUT
-    wait    D'9' ; 15 - 2 - 4 = 9
+    wait    D'7' ; 15 - 2 - 2 - 4 = 7
     goto    NL02_SendAfter_1_4
 NL02_SendOne_1_4:
     ; Send one bit
     bcf	    PIN_DATAOUT
     wait    D'15'
     bsf	    PIN_DATAOUT
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    ShiftPulseAddr
-    wait    D'13' ; 47 - 30 - 4 = 13
+    wait    D'41' ; 47 - 2 - 4 = 41
 NL02_SendAfter_1_4:
+    
+    bsf	    PIN_ADDR_LAT
+    bcf	    PIN_ADDR_LAT
     
 ; bit <3>
     rlcf    TX_DATA1, 1
@@ -659,7 +635,6 @@ NL02_SendAfter_1_0:
     nop
     
     SendFinalByte
-    ;wait    D'108'
     
     ; Send and reset CRC
     movffl  CRCACCL, TX_DATA
@@ -687,9 +662,6 @@ N64Loop03: ; Do 0x03 (write accessory port) command here
     call    SendN64Byte
     call    SendN64StopBit
     
-    bsf PORTB,1
-    bcf PORTB,1
-    
     bcf     N64_DATA_TMP1, 4
     bcf     N64_DATA_TMP1, 3
     bcf     N64_DATA_TMP1, 2
@@ -709,23 +681,6 @@ N64Loop03_Loop:
     
     decfsz  LOOP_COUNT_0
     goto    N64Loop03_Loop
-    
-    
-    bsf PORTB,1
-    bcf PORTB,1
-    
-;    lfsr    1, N64_DATA_TMP0
-;    movlw   D'34'
-;    movwf   LOOP_COUNT_0
-;    movlw   D'220'
-;    movwf   PAUSE_REG_0
-;    movlw   D'1'
-;    movwf   PAUSE_REG_1
-;N64Loop03_DebugLoop:
-;    movffl  POSTINC1, U2TXB
-;    call    Pause2D
-;    decfsz  LOOP_COUNT_0
-;    goto    N64Loop03_DebugLoop
     
     goto ContinueLFNL ; not strictly necessary to have this goto right now, but will be as more commands are supported
     
