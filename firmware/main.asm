@@ -36,7 +36,7 @@ IntVec      code    0x0008
 #define     PIN_ASTICK_YB   PORTB, 3
 #define     PIN_ASTICK_YA   PORTB, 2
 
-#define     PIN_MEM_RW      LATC,  7
+#define     PIN_PAK_RW      LATD,  5
 #define     PIN_IO_OE1      LATC,  6
 #define     PIN_IO_SER_IN   PORTC, 5
 #define     PIN_IO_S1       LATC,  4
@@ -46,6 +46,7 @@ IntVec      code    0x0008
 #define     PIN_dU          PORTC, 0
 
 #define     PIN_ADDR_LAT    LATD,  6
+#define     PIN_PAK_OE      LATD,  4
 #define     PIN_IO_SER_OUT  LATD,  3
 #define     PIN_IO_CLK      LATD,  2
 #define     PIN_DATAIN      PORTD, 1
@@ -176,7 +177,8 @@ Setup:
     bcf     PIN_ADDR_LAT
     bcf     PIN_IO_CLK
     bsf     PIN_IO_OE1
-    bsf     PIN_MEM_RW
+    bsf     PIN_PAK_RW
+    bcf     PIN_PAK_OE
     
     movlw   B'00000000'
     movwf   H'20'
@@ -189,7 +191,7 @@ Setup:
                             ; MODE is 0000 by default, which sets UART to Async 8-bit
     bcf     U2CON0, U2BRGS  ; normal baud rate formula
     clrf    U2BRGH
-    movlw   D'15'
+    movlw   D'7'
     movwf   U2BRGL          ; set baud rate to 250,000
     bsf     U2CON1, U2ON    ; enable UART2
     
@@ -209,7 +211,7 @@ Setup:
     ; === Enable SPI ===
     movlb   B'111101'   ; Bank 61
     clrf    SPI1TWIDTH
-    movlw   D'3'
+    movlw   D'4'
     movwf   SPI1BAUD
     bsf     SPI1CON0, MST
     bsf     SPI1CON0, BMODE
@@ -238,8 +240,18 @@ Setup:
     movlb   B'00000000'
     
     ; Initialize Shift Registers to all zeros
-    ShiftAddrDualByte ZEROS_REG, ZEROS_REG
-    ShiftIoOutByte ZEROS_REG
+    movlw   B'00000000'
+    movffl WREG, SPI1TXB
+    movlw   B'00000000'
+    movffl WREG, SPI1TXB
+    wait D'48'
+    bsf	    PIN_ADDR_LAT
+    bcf	    PIN_ADDR_LAT
+    movlw   B'00000000'
+    ShiftIoOutByte WREG
+    ;WriteToMem
+    
+    ;call    PakCycle
     
     ; === Begin Main Loop ===
 Start:
@@ -252,9 +264,12 @@ Start:
 ListenForN64:
     bsf     TRIS_DATAIO ; set to input
     
+ListenForN64Loop:
     ;btfsc   PIN_START
     ;call    PakDump
-ListenForN64Loop:
+    ;bsf PORTD,5
+    ;bcf PORTD,5
+    
     btfsc   PIN_DATAIN
     goto    ListenForN64Loop        ; wait until datapin goes LOW
     
@@ -266,9 +281,11 @@ LFNL_DecodeLoop:
     btfsc   PIN_DATAIN
     goto    LFNL_DecodeLoop         ; wait until datapin goes LOW, if not already
     
+    movffl  N64_DATA_DETER, U2TXB
+    
     call    DetermineDataToByte2    ; will have 11 cycles left over
     movffl  N64_DATA_DETER, POSTINC1
-    wait    D'4'
+    nop
     btfss   UTIL_FLAGS, 7
     goto    LFNL_DecodeLoop         ; if not skipped, 7 cycles will have been consumed after jumping
     
@@ -282,8 +299,6 @@ LFNL_DecodeLoop:
     
     bcf     TRIS_DATAIO ; set to output
     bsf     PIN_DATAOUT
-    
-    movffl  N64_CMD_REG, U2TXB
     
     movf    N64_CMD_REG, 0
     xorlw   N64_CMD_STATE
@@ -401,7 +416,7 @@ ContAfterRstCheck:
     call    SendN64Byte
     call    SendN64StopBit
     
-    movlw   D'220'
+    movlw   D'110'
     movwf   PAUSE_REG_0
     movlw   D'1'
     movwf   PAUSE_REG_1
@@ -429,15 +444,49 @@ N64Loop02: ; Do 0x02 (read accessory port) command here
     bsf	    CRCCON0, CRCGO
     BANKSEL ZEROS_REG
     
+    bcf     PIN_PAK_OE ; enable output on pak
+    
+    ;ShiftIoOutByte ONES_REG
+    ;ShiftIoOutByte ZEROS_REG
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    
     ; Read first byte
-    ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
-    ShiftIoInByte TX_DATA1
+    movffl  N64_DATA_TMP0, SPI1TXB
+    movffl  N64_DATA_TMP1, SPI1TXB
+    wait    D'48'
+    bsf	    PIN_ADDR_LAT
+    bcf	    PIN_ADDR_LAT
+    PrepareIoRead
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    bsf     PIN_IO_OE1
+    movwf   TX_DATA2
+    movlb   B'111001' ; bank 57
+    movwf   CRCDATL
+    movlb   B'000000' ; bank 0
+    ;ShiftAddrDualByte N64_DATA_TMP0, N64_DATA_TMP1
+    ;ShiftIoInByte TX_DATA1
     IncAddrBytes
-    movffl  TX_DATA1, CRCDATL
+    movff   TX_DATA2, TX_DATA1
+    ;movffl  TX_DATA1, CRCDATL
     
     movlw   D'31'
     movwf   LOOP_COUNT_0
 NL02_SendLoop:
+    movffl  TX_DATA1, U2TXB
     ; *** Byte #1 Transmission | Byte #2 Read ***
 ; bit <7>
     rlcf    TX_DATA1, 1
@@ -619,7 +668,7 @@ NL02_SendAfter_1_1:
     movff   TX_DATA2, TX_DATA1
     wait    D'45' ; 47 - 2 = 45
     bsf	    PIN_DATAOUT
-    wait    D'6' ; 15 - 2 - 3 - 4 = 9
+    wait    D'3' ; 15 - 2 - 3 - 4 - 3 = 6
     goto    NL02_SendAfter_1_0
 NL02_SendOne_1_0:
     ; Send one bit
@@ -627,12 +676,14 @@ NL02_SendOne_1_0:
     wait    D'15'
     bsf	    PIN_DATAOUT
     movff   TX_DATA2, TX_DATA1
-    wait    D'38' ; 47 - 2 - 3 - 4 = 38
+    wait    D'35' ; 47 - 2 - 3 - 4 - 3 = 35
 NL02_SendAfter_1_0:
     
     decfsz  LOOP_COUNT_0
     goto    NL02_SendLoop
     nop
+    
+    movffl TX_DATA1, U2TXB
     
     SendFinalByte
     
@@ -653,6 +704,8 @@ NL02_SendAfter_1_0:
     
 N64Loop03: ; Do 0x03 (write accessory port) command here
     BANKSEL ZEROS_REG
+    
+    bsf     PIN_PAK_OE ; disable output on pak
     
     ;call    CRCHardware
     call    CRCHardwareSpeed

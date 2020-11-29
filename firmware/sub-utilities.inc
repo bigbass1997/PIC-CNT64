@@ -59,17 +59,36 @@ SendN64StopBit:
     
     
 PakDump:
-    movlw   D'220'
+    movlw   D'110'
     movwf   PAUSE_REG_0
     movlw   D'1'
     movwf   PAUSE_REG_1
+    clrf    H'20'
+    clrf    H'21'
     
 PakDumpLoop:
     
-    ShiftAddrDualByte H'20', H'21' ; set address
-    ShiftIoInByte H'23' ; load byte
-    movffl  H'23', U2TXB ; transmit byte
+    movffl  H'20', SPI1TXB
+    ;movffl  H'20', U2TXB
+    movffl  H'21', SPI1TXB
+    ;movffl  H'21', U2TXB
     
+    wait D'48'
+    bsf	    PIN_ADDR_LAT
+    bcf	    PIN_ADDR_LAT
+    
+    PrepareIoRead
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    ShiftPulseIo
+    bsf     PIN_IO_OE1
+    
+    movffl  WREG, U2TXB ; transmit byte
     call    Pause2D
     
     ; increase address by 1
@@ -78,8 +97,80 @@ PakDumpLoop:
     goto    PakDumpLoop
     
     incf    H'20'
+    bcf	    H'20', 7
+    movf    H'20', 1
     btfss   STATUS, Z
     goto    PakDumpLoop
+    
+    return
+    
+PakCycle:
+    movlw   D'220'
+    movwf   PAUSE_REG_0
+    movlw   D'1'
+    movwf   PAUSE_REG_1
+    clrf    H'20'
+    clrf    H'21'
+    
+PakCycleLoop:
+    
+    movffl  H'20', SPI1TXB
+    ;movffl  H'20', U2TXB
+    movffl  H'21', SPI1TXB
+    ;movffl  H'21', U2TXB
+    
+    wait D'48'
+    bsf	    PIN_ADDR_LAT
+    bcf	    PIN_ADDR_LAT
+    
+    ShiftIoOutByte ZEROS_REG
+    WriteToMem
+    
+    ;PrepareIoRead
+    ;ShiftPulseIo
+    ;ShiftPulseIo
+    ;ShiftPulseIo
+    ;ShiftPulseIo
+    ;ShiftPulseIo
+    ;ShiftPulseIo
+    ;ShiftPulseIo
+    ;ShiftPulseIo
+    ;bsf     PIN_IO_OE1
+    
+    movffl  WREG, U2TXB ; transmit byte
+    call    Pause2D
+    call    Pause2D
+    call    Pause2D
+    
+    ; increase address by 1
+    incf    H'21'
+    btfss   STATUS, Z
+    goto    PakCycleLoop
+    
+    incf    H'20'
+    bcf	    H'20', 7
+    movf    H'20', 1
+    btfss   STATUS, Z
+    goto    PakCycleLoop
+    
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    wait D'255'
+    ;goto    PakCycle
     
     return
     

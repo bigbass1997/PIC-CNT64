@@ -67,7 +67,7 @@ TransmitContStopBit macro port, bit, cutOvertime
 ShiftAddrDualByte macro reg1, reg2
     movffl  reg1, SPI1TXB
     movffl  reg2, SPI1TXB
-    wait    D'32'
+    wait    D'48'
     bsf	    PIN_ADDR_LAT
     bcf	    PIN_ADDR_LAT
     
@@ -78,7 +78,7 @@ ShiftAddrDualByteLit macro lit1, lit2
     movffl  WREG, SPI1TXB
     movlw   lit2
     movffl  WREG, SPI1TXB
-    wait    D'32'
+    wait    D'48'
     bsf	    PIN_ADDR_LAT
     bcf	    PIN_ADDR_LAT
     
@@ -154,7 +154,7 @@ ShiftIoOutByte	macro reg
 WriteToMem macro
     bcf     PIN_IO_OE1
     
-    bcf     PIN_MEM_RW
+    bcf     PIN_PAK_RW
     nop
     nop
     nop
@@ -163,7 +163,7 @@ WriteToMem macro
     nop
     nop
     nop
-    bsf     PIN_MEM_RW
+    bsf     PIN_PAK_RW
     
     bsf     PIN_IO_OE1
     
